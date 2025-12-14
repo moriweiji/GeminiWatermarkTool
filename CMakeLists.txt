@@ -109,7 +109,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
 message(STATUS "")
-message(STATUS "=== Sudoku Solver Configuration ===")
+message(STATUS "=== Gemini Watermark Tool Configuration ===")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "OpenCV: ${OpenCV_VERSION}")
