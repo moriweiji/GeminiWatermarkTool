@@ -15,7 +15,12 @@ A lightweight command-line tool to remove Gemini AI watermarks from images.
 - **Auto Size Detection** - Automatically detects 48×48 or 96×96 watermark size
 - **Mathematically Accurate** - Precise restoration using reverse alpha blending
 
-<!-- Before/After Preview -->
+## Demo
+
+![Comparison](artworks/demo.gif)
+
+## Side by Side Comparison
+
 ![Comparison](artworks/comparison.png)
 
 ## Download
@@ -207,7 +212,7 @@ Make sure the output path is writable and the file isn't open in another program
 
 - Only removes **Gemini visible watermarks** (the semi-transparent logo in bottom-right)
 - Does not remove invisible/steganographic watermarks
-- Designed for Gemini's current watermark pattern (as of 2024)
+- Designed for Gemini's current watermark pattern (as of 2025)
 
 ---
 
@@ -325,7 +330,6 @@ cmake --build build
 gemini-watermark-tool/
 ├── CMakeLists.txt              # Main build configuration
 ├── CMakePresets.json           # Cross-platform build presets
-├── CMakeSettings.json          # Visual Studio 2022 settings
 ├── vcpkg.json                  # Dependencies manifest
 ├── src/
 │   ├── main.cpp                # CLI entry point
@@ -334,9 +338,6 @@ gemini-watermark-tool/
 │   ├── blend_modes.cpp         # Alpha blending algorithms
 │   ├── blend_modes.hpp
 │   └── ascii_logo.hpp          # ASCII art banner
-├── assets/
-│   ├── original_black_bg_48.png  # 48×48 watermark reference
-│   └── original_black_bg_96.png  # 96×96 watermark reference
 └── resources/
     ├── app.ico                 # Windows application icon
     └── app.rc.in               # Windows resource template
