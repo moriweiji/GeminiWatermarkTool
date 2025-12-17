@@ -1,15 +1,20 @@
 # Gemini Watermark Tool
 
-A lightweight command-line tool to remove Gemini AI watermarks from images.
+Gemini Watermark Tool is a lightweight, standalone command-line utility that removes Gemini Nano Banana / Pro watermarks from images using **mathematically accurate reverse alpha blending**.
+
+- **Fast & offline**: single executable, **zero dependencies**
+- **Flexible workflows**: in-place editing, explicit input/output, and **batch directory** processing
+- **Cross-platform**: Windows / Linux / macOS / Android
+- **Auto detection**: detects 48×48 vs 96×96 watermark size automatically
 
 <!-- CLI Preview -->
 ![Preview](artworks/preview.png)
 
 ## Features
 
+- **Batch Processing** - Process entire directories at once
 - **One-Click Removal** - Simply drag & drop an image onto the executable
 - **In-Place Editing** - Process files directly without specifying output
-- **Batch Processing** - Process entire directories at once
 - **Cross-Platform** - Windows, Linux, macOS, and Android
 - **Zero Dependencies** - Single standalone executable, no installation required
 - **Auto Size Detection** - Automatically detects 48×48 or 96×96 watermark size
@@ -96,7 +101,7 @@ GeminiWatermarkTool -i input.jpg -o output.jpg
 GeminiWatermarkTool -i input.jpg -o output.jpg --remove
 ```
 
-### Batch Processing
+## Batch Processing (Directory Mode)
 
 Process all images in a directory:
 
@@ -104,7 +109,9 @@ Process all images in a directory:
 GeminiWatermarkTool -i ./watermarked_images/ -o ./clean_images/
 ```
 
-Supported formats: `.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`
+- Input: directory
+- Output: directory
+- Supported formats: `.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`
 
 ## Command Line Options
 
@@ -410,3 +417,4 @@ MIT License
 <p align="center">
   <i>If this tool helped you, consider giving it a ⭐</i>
 </p>
+
