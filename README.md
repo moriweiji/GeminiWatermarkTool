@@ -1,5 +1,22 @@
 # Gemini Watermark Tool
 
+> ## 📌 Original Author Notice (Reverse Alpha Blending)
+> I am the original author of **GeminiWatermarkTool** and the reverse **alpha-blending** restoration method used to remove the visible “Gemini” watermark while preserving image detail (Allen Kuo / allenk).
+>
+> This project achieves high-precision restoration by using my calibrated **48×48** and **96×96** **Reverse-Alpha Masks** to invert the blending equation. Since I published this work and these assets, many derivative tools (desktop apps, websites, browser extensions, etc.) have appeared using the same approach and/or directly reusing the masks produced by this project — because the method is deterministic and highly effective.
+>
+> ✅ **MIT License reminder**  
+> This project is released under the **MIT License**. Commercial use and ports are allowed.  
+> However, if you **redistribute** any substantial portion of this project (including code or mask assets), you must:
+> - Preserve the original **copyright notice**
+> - Include the full **MIT license text**
+> - (Recommended) Provide attribution with a link back to this repository
+>
+> 📖 For the full technical write-up (including how the Reverse-Alpha Masks were derived and calibrated), see:  
+> **Removing Gemini AI Watermarks: A Deep Dive into Reverse Alpha Blending**  
+> https://allenkuo.medium.com/removing-gemini-ai-watermarks-a-deep-dive-into-reverse-alpha-blending-bbbd83af2a3f
+
+
 Gemini Watermark Tool is a lightweight, standalone command-line utility that removes Gemini Nano Banana / Pro watermarks from images using **mathematically accurate reverse alpha blending**.
 
 - **Fast & offline**: single executable, **zero dependencies**
@@ -469,3 +486,4 @@ MIT License
 <p align="center">
   <i>If this tool helped you, consider giving it a ⭐</i>
 </p>
+
