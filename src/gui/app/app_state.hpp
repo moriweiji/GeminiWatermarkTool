@@ -13,6 +13,7 @@
 
 #include "core/watermark_engine.hpp"
 #include "gui/backend/render_backend.hpp"
+#include "gui/resources/style.hpp"
 
 #include <opencv2/core.hpp>
 #include <filesystem>
@@ -204,22 +205,63 @@ struct PreviewOptions {
 // =============================================================================
 
 /**
+ * Status of a single file in batch processing
+ */
+enum class BatchFileStatus {
+    Pending,    // Not yet processed
+    Processing, // Currently being processed
+    OK,         // Successfully processed
+    Skipped,    // Skipped (no watermark detected)
+    Failed      // Processing failed
+};
+
+/**
+ * Result for a single file in batch
+ */
+struct BatchFileResult {
+    std::filesystem::path path;
+    BatchFileStatus status{BatchFileStatus::Pending};
+    float confidence{0.0f};         // Detection confidence
+    std::string message;            // Status message
+};
+
+/**
  * Batch processing state
  */
 struct BatchState {
-    std::vector<std::filesystem::path> files;
-    std::optional<std::filesystem::path> output_dir;
+    // File list and per-file results
+    std::vector<BatchFileResult> files;
+
+    // Processing state
     size_t current_index{0};
     size_t success_count{0};
+    size_t skip_count{0};
     size_t fail_count{0};
     bool in_progress{false};
     bool cancel_requested{false};
 
+    // Detection settings
+    float detection_threshold{batch_theme::kDefaultThreshold};
+    bool use_detection{true};           // Enable watermark detection
+
+    // Thumbnail atlas
+    TextureHandle thumbnail_texture;    // Combined atlas texture
+    int thumbnail_cols{0};              // Grid columns (set during generation)
+    int thumbnail_rows{0};              // Grid rows (set during generation)
+    int thumbnail_cell_size{batch_theme::kThumbnailCellSize};
+    bool thumbnails_ready{false};       // Atlas has been generated
+
+    // Confirmation dialog
+    bool show_confirm_dialog{false};    // Show "overwrite files?" dialog
+
     void clear() {
         files.clear();
-        output_dir.reset();
-        current_index = success_count = fail_count = 0;
+        current_index = success_count = skip_count = fail_count = 0;
         in_progress = cancel_requested = false;
+        thumbnails_ready = false;
+        show_confirm_dialog = false;
+        // Note: detection_threshold and use_detection are NOT reset
+        // Note: thumbnail_texture must be destroyed externally before clear
     }
 
     [[nodiscard]] float progress() const noexcept {
@@ -228,6 +270,10 @@ struct BatchState {
     }
 
     [[nodiscard]] size_t total() const noexcept { return files.size(); }
+    [[nodiscard]] bool is_batch_mode() const noexcept { return !files.empty(); }
+    [[nodiscard]] bool is_complete() const noexcept {
+        return !files.empty() && !in_progress && current_index >= files.size();
+    }
 };
 
 // =============================================================================
@@ -301,6 +347,9 @@ struct AppState {
      * Check if ready to process
      */
     [[nodiscard]] bool can_process() const noexcept {
+        // Batch mode: can process if files are queued and not already processing
+        if (batch.is_batch_mode() && !batch.in_progress) return true;
+        // Single mode
         return state == ProcessState::Loaded || state == ProcessState::Completed;
     }
 

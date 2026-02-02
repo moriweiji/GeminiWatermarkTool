@@ -189,4 +189,48 @@ inline ImVec4 get_accent_color() {
     return ImVec4(0.26f, 0.75f, 0.82f, 1.00f);
 }
 
+// =============================================================================
+// Batch Thumbnail Layout Constants
+// =============================================================================
+
+namespace batch_theme {
+
+    // Grid layout
+    constexpr int kThumbnailCols       = 4;       // Thumbnails per row
+    constexpr int kThumbnailCellSize   = 220;     // Cell size in pixels
+    constexpr int kThumbnailMaxCount   = 32;      // Max thumbnails to display
+
+    // Spacing & padding (in atlas pixels)
+    constexpr int kCellPadding         = 6;       // Padding inside each cell
+    constexpr int kCellGapV            = 12;      // Vertical gap between rows
+    constexpr int kLabelHeight         = 22;      // Filename label area height
+
+    // Atlas background
+    constexpr int kAtlasBgR = 30, kAtlasBgG = 30, kAtlasBgB = 30, kAtlasBgA = 255;
+    // Cell background
+    constexpr int kCellBgR  = 50, kCellBgG  = 50, kCellBgB  = 50, kCellBgA  = 255;
+    // Cell border
+    constexpr int kCellBorderR = 80, kCellBorderG = 80, kCellBorderB = 80, kCellBorderA = 255;
+    // Label background
+    constexpr int kLabelBgR = 0, kLabelBgG = 0, kLabelBgB = 0, kLabelBgA = 170;
+    // Label text
+    constexpr int kLabelTextR = 200, kLabelTextG = 200, kLabelTextB = 200, kLabelTextA = 255;
+
+    // Status overlay colors (RGBA)
+    constexpr ImU32 kOverlayOK         = IM_COL32(0, 180, 0, 50);
+    constexpr ImU32 kOverlaySkip       = IM_COL32(100, 100, 100, 120);
+    constexpr ImU32 kOverlayFail       = IM_COL32(200, 0, 0, 70);
+    constexpr ImU32 kOverlayProcessing = IM_COL32(255, 200, 0, 50);
+
+    constexpr ImU32 kIconOK            = IM_COL32(100, 255, 100, 255);
+    constexpr ImU32 kIconSkip          = IM_COL32(180, 180, 180, 255);
+    constexpr ImU32 kIconFail          = IM_COL32(255, 100, 100, 255);
+    constexpr ImU32 kIconDefault       = IM_COL32(255, 255, 255, 220);
+
+    // Detection
+    constexpr float kDefaultThreshold  = 0.25f;   // 25% recommended
+    constexpr int   kThresholdStep     = 5;        // Slider step size (%)
+
+}  // namespace batch_theme
+
 }  // namespace gwt::gui

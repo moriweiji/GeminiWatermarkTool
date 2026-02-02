@@ -6,6 +6,7 @@
  */
 
 #include "gui/widgets/image_preview.hpp"
+#include "gui/resources/style.hpp"
 
 #include <imgui.h>
 #include <algorithm>
@@ -24,6 +25,12 @@ ImagePreview::ImagePreview(AppController& controller)
 
 void ImagePreview::render() {
     const auto& state = m_controller.state();
+
+    // Batch mode: show thumbnail atlas + progress
+    if (state.batch.is_batch_mode()) {
+        render_batch_view();
+        return;
+    }
 
     if (!state.image.has_image()) {
         render_placeholder();
@@ -57,6 +64,233 @@ void ImagePreview::render_placeholder() {
     ImVec2 p_max(content_start.x + avail.x - margin, content_start.y + avail.y - margin);
 
     draw_list->AddRect(p_min, p_max, IM_COL32(128, 128, 128, 128), 0, 0, 1.0f);
+}
+
+// =============================================================================
+// Batch View
+// =============================================================================
+
+void ImagePreview::render_batch_view() {
+    using namespace batch_theme;
+
+    const auto& state = m_controller.state();
+    const auto& batch = state.batch;
+
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+
+    // Scrollable area for batch view
+    ImGui::BeginChild("BatchScrollRegion", avail, false, ImGuiWindowFlags_HorizontalScrollbar);
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    float outer_pad = 10.0f;
+
+    // --- Thumbnail Atlas ---
+    if (batch.thumbnails_ready && batch.thumbnail_texture.valid()) {
+        void* tex_id = m_controller.get_batch_thumbnail_texture_id();
+        
+        if (tex_id) {
+            // Atlas actual pixel size (includes vertical gaps)
+            float atlas_w = static_cast<float>(batch.thumbnail_cols * kThumbnailCellSize);
+            float atlas_h = static_cast<float>(
+                batch.thumbnail_rows * kThumbnailCellSize
+                + (batch.thumbnail_rows > 0 ? (batch.thumbnail_rows - 1) * kCellGapV : 0));
+
+            // Scale atlas to fit width, but don't upscale
+            float atlas_scale = std::min(1.0f, (avail.x - outer_pad * 2) / atlas_w);
+            float display_w = atlas_w * atlas_scale;
+            float display_h = atlas_h * atlas_scale;
+
+            // Center horizontally
+            float offset_x = (avail.x - display_w) * 0.5f;
+            ImGui::SetCursorPosX(offset_x);
+
+            ImVec2 atlas_pos = ImGui::GetCursorScreenPos();
+
+            ImGui::Image(reinterpret_cast<ImTextureID>(tex_id),
+                        ImVec2(display_w, display_h));
+
+            // Draw status overlays + filename labels
+            int max_thumbs = std::min(static_cast<int>(batch.files.size()), kThumbnailMaxCount);
+            float cell_w = static_cast<float>(kThumbnailCellSize) * atlas_scale;
+            float cell_h = static_cast<float>(kThumbnailCellSize) * atlas_scale;
+            float gap_v_scaled = static_cast<float>(kCellGapV) * atlas_scale;
+            float label_h_scaled = static_cast<float>(kLabelHeight) * atlas_scale;
+
+            for (int i = 0; i < max_thumbs; ++i) {
+                int col = i % batch.thumbnail_cols;
+                int row = i / batch.thumbnail_cols;
+
+                ImVec2 cell_tl(atlas_pos.x + col * cell_w,
+                              atlas_pos.y + row * (cell_h + gap_v_scaled));
+                ImVec2 cell_br(cell_tl.x + cell_w, cell_tl.y + cell_h);
+
+                const auto& file = batch.files[i];
+
+                // Status overlay
+                ImU32 overlay_color = IM_COL32(0, 0, 0, 0);
+                const char* icon = nullptr;
+                ImU32 icon_color = kIconDefault;
+
+                switch (file.status) {
+                    case BatchFileStatus::OK:
+                        overlay_color = kOverlayOK;
+                        icon = "OK";
+                        icon_color = kIconOK;
+                        break;
+                    case BatchFileStatus::Skipped:
+                        overlay_color = kOverlaySkip;
+                        icon = "SKIP";
+                        icon_color = kIconSkip;
+                        break;
+                    case BatchFileStatus::Failed:
+                        overlay_color = kOverlayFail;
+                        icon = "FAIL";
+                        icon_color = kIconFail;
+                        break;
+                    case BatchFileStatus::Processing:
+                        overlay_color = kOverlayProcessing;
+                        icon = "...";
+                        break;
+                    default:
+                        break;
+                }
+
+                if (overlay_color != IM_COL32(0, 0, 0, 0)) {
+                    draw_list->AddRectFilled(cell_tl, cell_br, overlay_color);
+                }
+                if (icon) {
+                    ImVec2 text_sz = ImGui::CalcTextSize(icon);
+                    draw_list->AddText(
+                        ImVec2(cell_tl.x + (cell_w - text_sz.x) * 0.5f,
+                               cell_tl.y + (cell_h - label_h_scaled - text_sz.y) * 0.5f),
+                        icon_color, icon);
+                }
+
+                // Filename label at bottom of cell
+                std::string filename = file.path.filename().string();
+                float max_label_w = cell_w - 6.0f;
+                std::string display_name = filename;
+                ImVec2 name_sz = ImGui::CalcTextSize(display_name.c_str());
+                if (name_sz.x > max_label_w && display_name.size() > 12) {
+                    std::string ext = file.path.extension().string();
+                    size_t keep = std::max(static_cast<size_t>(6),
+                                           display_name.size() - ext.size());
+                    while (keep > 3) {
+                        display_name = filename.substr(0, keep) + ".." + ext;
+                        name_sz = ImGui::CalcTextSize(display_name.c_str());
+                        if (name_sz.x <= max_label_w) break;
+                        keep--;
+                    }
+                }
+
+                // Label background
+                ImVec2 label_tl(cell_tl.x, cell_br.y - label_h_scaled);
+                ImVec2 label_br(cell_br.x, cell_br.y);
+                draw_list->AddRectFilled(label_tl, label_br,
+                    IM_COL32(kLabelBgR, kLabelBgG, kLabelBgB, kLabelBgA));
+
+                // Label text centered
+                name_sz = ImGui::CalcTextSize(display_name.c_str());
+                draw_list->AddText(
+                    ImVec2(cell_tl.x + (cell_w - name_sz.x) * 0.5f,
+                           label_tl.y + (label_h_scaled - name_sz.y) * 0.5f),
+                    IM_COL32(kLabelTextR, kLabelTextG, kLabelTextB, kLabelTextA),
+                    display_name.c_str());
+            }
+
+            // "[+N more...]" indicator
+            if (batch.files.size() > static_cast<size_t>(kThumbnailMaxCount)) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                                  "[+%zu more files...]",
+                                  batch.files.size() - kThumbnailMaxCount);
+            }
+        }
+    }
+
+    ImGui::Spacing();
+
+    // --- Progress Bar ---
+    if (batch.in_progress || batch.is_complete()) {
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float progress = batch.progress();
+        char overlay[64];
+        snprintf(overlay, sizeof(overlay), "%zu / %zu",
+                 batch.current_index, batch.files.size());
+
+        ImGui::SetNextItemWidth(-1);
+        ImGui::ProgressBar(progress, ImVec2(-1, 0), overlay);
+
+        ImGui::Spacing();
+    }
+
+    // --- Result List ---
+    if (batch.in_progress || batch.is_complete()) {
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::Text("Results");
+
+        float list_height = std::max(100.0f, avail.y * 0.3f);
+        ImGui::BeginChild("BatchResults", ImVec2(-1, list_height), true);
+
+        for (size_t i = 0; i < batch.current_index && i < batch.files.size(); ++i) {
+            const auto& f = batch.files[i];
+            std::string filename = f.path.filename().string();
+
+            ImVec4 color;
+            const char* tag;
+            switch (f.status) {
+                case BatchFileStatus::OK:
+                    color = ImVec4(0.3f, 0.8f, 0.3f, 1.0f);
+                    tag = "[OK]";
+                    break;
+                case BatchFileStatus::Skipped:
+                    color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+                    tag = "[SKIP]";
+                    break;
+                case BatchFileStatus::Failed:
+                    color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
+                    tag = "[FAIL]";
+                    break;
+                default:
+                    color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                    tag = "[...]";
+                    break;
+            }
+
+            ImGui::TextColored(color, "%-6s %s", tag, filename.c_str());
+            if (f.confidence > 0.0f) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                                  "(%.0f%%)", f.confidence * 100.0f);
+            }
+        }
+
+        // Auto-scroll result list
+        if (batch.in_progress && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10) {
+            ImGui::SetScrollHereY(1.0f);
+        }
+
+        ImGui::EndChild();
+    }
+
+    // --- Summary ---
+    if (batch.is_complete()) {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f),
+                          "Complete: %zu OK, %zu skipped, %zu failed (total: %zu)",
+                          batch.success_count, batch.skip_count,
+                          batch.fail_count, batch.total());
+    }
+
+    // Auto-scroll to progress area when batch starts
+    if (batch.in_progress && batch.current_index <= 1) {
+        ImGui::SetScrollHereY(1.0f);
+    }
+
+    ImGui::EndChild();
 }
 
 // =============================================================================

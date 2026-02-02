@@ -133,19 +133,19 @@ public:
     // ==========================================================================
     
     /**
-     * Add files to batch queue
-     * @param files  Paths to add
+     * Enter batch mode with multiple files (from drag & drop)
+     * Generates thumbnail atlas and prepares batch state
+     * @param files  Paths to process
      */
-    void add_batch_files(std::span<const std::filesystem::path> files);
+    void enter_batch_mode(std::span<const std::filesystem::path> files);
     
     /**
-     * Set output directory for batch processing
-     * @param dir  Output directory path
+     * Exit batch mode and return to single-file mode
      */
-    void set_batch_output_dir(const std::filesystem::path& dir);
+    void exit_batch_mode();
     
     /**
-     * Start batch processing
+     * Start batch processing (after user confirms)
      */
     void start_batch_processing();
     
@@ -159,11 +159,6 @@ public:
      * Cancel batch processing
      */
     void cancel_batch();
-    
-    /**
-     * Clear batch queue
-     */
-    void clear_batch();
 
     // ==========================================================================
     // Texture Management
@@ -184,6 +179,11 @@ public:
      * Get ImGui texture ID for preview
      */
     [[nodiscard]] void* get_preview_texture_id() const;
+    
+    /**
+     * Get ImGui texture ID for batch thumbnail atlas
+     */
+    [[nodiscard]] void* get_batch_thumbnail_texture_id() const;
 
     // ==========================================================================
     // Utility
@@ -209,6 +209,9 @@ private:
     void update_display_image();
     void create_or_update_texture();
     cv::Mat prepare_texture_data(const cv::Mat& image);
+    
+    // Batch helpers
+    void generate_thumbnail_atlas();
 };
 
 }  // namespace gwt::gui

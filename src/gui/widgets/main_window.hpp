@@ -22,9 +22,9 @@ public:
      * @param controller  Application controller (must outlive window)
      */
     explicit MainWindow(AppController& controller);
-    
+
     ~MainWindow();
-    
+
     // Non-copyable
     MainWindow(const MainWindow&) = delete;
     MainWindow& operator=(const MainWindow&) = delete;
@@ -45,11 +45,14 @@ public:
 private:
     AppController& m_controller;
     std::unique_ptr<ImagePreview> m_image_preview;
-    
+
     // File dialog state
     std::string m_last_open_path;
     std::string m_last_save_path;
-    
+
+    // Drag & drop accumulator (SDL sends one event per file)
+    std::vector<std::filesystem::path> m_pending_drops;
+
     // UI rendering
     void render_menu_bar();
     void render_toolbar();
@@ -57,7 +60,8 @@ private:
     void render_image_area();
     void render_status_bar();
     void render_about_dialog();
-    
+    void render_batch_confirm_dialog();
+
     // Actions
     void action_open_file();
     void action_save_file();

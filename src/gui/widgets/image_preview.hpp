@@ -36,6 +36,7 @@ private:
 
     void render_image();
     void render_placeholder();
+    void render_batch_view();
     void handle_input(const ImVec2& viewport_size, float content_w, float content_h);
 
     // Custom watermark rect interaction

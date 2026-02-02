@@ -323,6 +323,16 @@ void MainWindow::render() {
     if (m_controller.state().show_about_dialog) {
         render_about_dialog();
     }
+
+    // Batch confirmation dialog
+    if (m_controller.state().batch.show_confirm_dialog) {
+        render_batch_confirm_dialog();
+    }
+
+    // Batch processing tick (process one file per frame)
+    if (m_controller.state().batch.in_progress) {
+        m_controller.process_batch_next();
+    }
 }
 
 // =============================================================================
@@ -364,8 +374,35 @@ bool MainWindow::handle_event(const SDL_Event& event) {
     if (event.type == SDL_EVENT_DROP_FILE) {
         std::filesystem::path path(event.drop.data);
 
-        if (AppController::is_supported_extension(path)) {
-            m_controller.load_image(path);
+        if (std::filesystem::is_directory(path)) {
+            // Directory dropped: collect all supported image files (non-recursive)
+            for (const auto& entry : std::filesystem::directory_iterator(path)) {
+                if (entry.is_regular_file() && AppController::is_supported_extension(entry.path())) {
+                    m_pending_drops.push_back(entry.path());
+                }
+            }
+            return true;
+        } else if (AppController::is_supported_extension(path)) {
+            // Single file
+            m_pending_drops.push_back(path);
+            return true;
+        }
+    }
+
+    // After all drop events, process the collected files
+    // SDL_EVENT_DROP_COMPLETE signals end of a drop operation
+    if (event.type == SDL_EVENT_DROP_COMPLETE) {
+        if (!m_pending_drops.empty()) {
+            if (m_pending_drops.size() == 1) {
+                // Single file: normal load
+                m_controller.exit_batch_mode();
+                m_controller.load_image(m_pending_drops[0]);
+            } else {
+                // Multiple files: enter batch mode
+                m_controller.exit_batch_mode();
+                m_controller.enter_batch_mode(m_pending_drops);
+            }
+            m_pending_drops.clear();
             return true;
         }
     }
@@ -390,7 +427,8 @@ void MainWindow::render_menu_bar() {
                 action_save_file_as();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Close", "Ctrl+W", false, m_controller.state().image.has_image())) {
+            if (ImGui::MenuItem("Close", "Ctrl+W", false,
+                                m_controller.state().image.has_image() || m_controller.state().batch.is_batch_mode())) {
                 action_close_file();
             }
             ImGui::Separator();
@@ -528,12 +566,16 @@ void MainWindow::render_control_panel() {
     if (ImGui::RadioButton("96x96 (Large)", size_option == 2)) {
         m_controller.set_size_mode(WatermarkSizeMode::Large);
     }
-    if (ImGui::RadioButton("Custom", size_option == 3)) {
-        m_controller.set_size_mode(WatermarkSizeMode::Custom);
+    // Custom mode is not available in batch mode
+    if (!state.batch.is_batch_mode()) {
+        if (ImGui::RadioButton("Custom", size_option == 3)) {
+            m_controller.set_size_mode(WatermarkSizeMode::Custom);
+        }
     }
 
-    // Custom mode controls
-    if (opts.size_mode == WatermarkSizeMode::Custom && state.image.has_image()) {
+    // Custom mode controls (not in batch mode)
+    if (opts.size_mode == WatermarkSizeMode::Custom && state.image.has_image()
+        && !state.batch.is_batch_mode()) {
         ImGui::Indent();
 
         if (state.custom_watermark.has_region) {
@@ -567,7 +609,7 @@ void MainWindow::render_control_panel() {
     }
 
     // Show detected info
-    if (state.watermark_info && state.image.has_image()) {
+    if (state.watermark_info && state.image.has_image() && !state.batch.is_batch_mode()) {
         ImGui::Spacing();
         ImGui::Text("Detected Info");
         ImGui::Separator();
@@ -586,46 +628,117 @@ void MainWindow::render_control_panel() {
         }
     }
 
-    ImGui::Spacing();
-    ImGui::Text("Preview");
-    ImGui::Separator();
+    // Detection threshold (always visible for batch, optional for single)
+    if (state.batch.is_batch_mode()) {
+        ImGui::Spacing();
+        ImGui::Text("Detection");
+        ImGui::Separator();
 
-    // Preview options
-    bool highlight = state.preview_options.highlight_watermark;
-    if (ImGui::Checkbox("Highlight Watermark", &highlight)) {
-        state.preview_options.highlight_watermark = highlight;
+        bool use_det = state.batch.use_detection;
+        if (ImGui::Checkbox("Auto-detect watermark", &use_det)) {
+            state.batch.use_detection = use_det;
+        }
+
+        if (state.batch.use_detection) {
+            // Convert to integer percentage for clean 5% steps
+            int threshold_pct = static_cast<int>(state.batch.detection_threshold * 100.0f + 0.5f);
+            // Snap to nearest 5
+            threshold_pct = ((threshold_pct + 2) / 5) * 5;
+            
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderInt("##threshold", &threshold_pct, 0, 100, "Threshold: %d%%")) {
+                // Snap to 5% steps
+                threshold_pct = ((threshold_pct + 2) / 5) * 5;
+                state.batch.detection_threshold = static_cast<float>(threshold_pct) / 100.0f;
+            }
+            if (threshold_pct > 0) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                                  "Skip images below %d%%", threshold_pct);
+            } else {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                                  "Process all images");
+            }
+            ImGui::TextColored(ImVec4(0.4f, 0.6f, 0.4f, 1.0f),
+                              "(25%% recommended)");
+        }
     }
 
-    bool show_processed = state.preview_options.show_processed;
-    ImGui::BeginDisabled(!state.image.has_processed());
-    if (ImGui::Checkbox("Show Processed", &show_processed)) {
-        state.preview_options.show_processed = show_processed;
-        m_controller.invalidate_texture();
+    // Preview options (only in single-image mode)
+    if (!state.batch.is_batch_mode()) {
+        ImGui::Spacing();
+        ImGui::Text("Preview");
+        ImGui::Separator();
+
+        bool highlight = state.preview_options.highlight_watermark;
+        if (ImGui::Checkbox("Highlight Watermark", &highlight)) {
+            state.preview_options.highlight_watermark = highlight;
+        }
+
+        bool show_processed = state.preview_options.show_processed;
+        ImGui::BeginDisabled(!state.image.has_processed());
+        if (ImGui::Checkbox("Show Processed", &show_processed)) {
+            state.preview_options.show_processed = show_processed;
+            m_controller.invalidate_texture();
+        }
+        ImGui::EndDisabled();
+
+        // Zoom
+        ImGui::Spacing();
+        ImGui::Text("Zoom: %.0f%%", state.preview_options.zoom * 100);
+        if (ImGui::Button("Fit")) action_zoom_fit();
+        ImGui::SameLine();
+        if (ImGui::Button("100%")) action_zoom_100();
+        ImGui::SameLine();
+        if (ImGui::Button("+")) action_zoom_in();
+        ImGui::SameLine();
+        if (ImGui::Button("-")) action_zoom_out();
     }
-    ImGui::EndDisabled();
 
-    // Zoom
-    ImGui::Spacing();
-    ImGui::Text("Zoom: %.0f%%", state.preview_options.zoom * 100);
-    if (ImGui::Button("Fit")) action_zoom_fit();
-    ImGui::SameLine();
-    if (ImGui::Button("100%")) action_zoom_100();
-    ImGui::SameLine();
-    if (ImGui::Button("+")) action_zoom_in();
-    ImGui::SameLine();
-    if (ImGui::Button("-")) action_zoom_out();
+    // Batch info
+    if (state.batch.is_batch_mode()) {
+        ImGui::Spacing();
+        ImGui::Text("Batch");
+        ImGui::Separator();
 
-    // Process button at bottom
+        ImGui::Text("Files: %zu", state.batch.total());
+        
+        if (state.batch.is_complete()) {
+            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f),
+                              "OK: %zu  Skipped: %zu  Failed: %zu",
+                              state.batch.success_count,
+                              state.batch.skip_count,
+                              state.batch.fail_count);
+        }
+
+        // Exit batch mode button
+        if (!state.batch.in_progress) {
+            if (ImGui::SmallButton("Exit Batch Mode")) {
+                m_controller.exit_batch_mode();
+            }
+        }
+    }
+
+    // Process button
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
     ImVec2 button_size(-1, 40.0f * state.dpi_scale);
-    ImGui::BeginDisabled(!state.can_process());
-    if (ImGui::Button("Process Image", button_size)) {
-        action_process();
+    
+    if (state.batch.in_progress) {
+        // Cancel button during batch processing
+        if (ImGui::Button("Cancel Batch", button_size)) {
+            m_controller.cancel_batch();
+        }
+    } else {
+        const char* button_label = state.batch.is_batch_mode()
+            ? "Process Batch" : "Process Image";
+        ImGui::BeginDisabled(!state.can_process());
+        if (ImGui::Button(button_label, button_size)) {
+            action_process();
+        }
+        ImGui::EndDisabled();
     }
-    ImGui::EndDisabled();
 
     // Tips section
     ImGui::Spacing();
@@ -734,6 +847,68 @@ void MainWindow::render_about_dialog() {
     }
 }
 
+void MainWindow::render_batch_confirm_dialog() {
+    auto& state = m_controller.state();
+    
+    ImGui::OpenPopup("Batch Processing");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Batch Processing", &state.batch.show_confirm_dialog,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Warning: Original files will be overwritten!");
+        ImGui::Spacing();
+
+        ImGui::Text("Files to process: %zu", state.batch.total());
+        ImGui::Text("Mode: %s", state.process_options.remove_mode ? "Remove Watermark" : "Add Watermark");
+        
+        // Size mode
+        const char* size_label = "Auto";
+        switch (state.process_options.size_mode) {
+            case WatermarkSizeMode::Small:  size_label = "48x48"; break;
+            case WatermarkSizeMode::Large:  size_label = "96x96"; break;
+            case WatermarkSizeMode::Custom: size_label = "Custom (auto-detect per image)"; break;
+            default: break;
+        }
+        ImGui::Text("Size: %s", size_label);
+
+        if (state.batch.use_detection) {
+            int threshold_pct = static_cast<int>(state.batch.detection_threshold * 100.0f + 0.5f);
+            ImGui::Text("Detection threshold: %d%%", threshold_pct);
+            if (threshold_pct > 0) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                                  "Images below %d%% confidence will be skipped.", threshold_pct);
+            } else {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                                  "All images will be processed (threshold = 0%%).");
+            }
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f),
+                              "Detection disabled - all images will be processed!");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float button_w = 120.0f * state.dpi_scale;
+        
+        if (ImGui::Button("Process", ImVec2(button_w, 0))) {
+            state.batch.show_confirm_dialog = false;
+            m_controller.start_batch_processing();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(button_w, 0))) {
+            state.batch.show_confirm_dialog = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
 // =============================================================================
 // Actions
 // =============================================================================
@@ -777,11 +952,23 @@ void MainWindow::action_save_file_as() {
 }
 
 void MainWindow::action_close_file() {
+    // Exit batch mode if active
+    if (m_controller.state().batch.is_batch_mode()) {
+        m_controller.exit_batch_mode();
+    }
     m_controller.close_image();
 }
 
 void MainWindow::action_process() {
-    m_controller.process_current();
+    auto& state = m_controller.state();
+    
+    if (state.batch.is_batch_mode()) {
+        // Batch mode: show confirmation dialog
+        state.batch.show_confirm_dialog = true;
+    } else {
+        // Single mode: process directly
+        m_controller.process_current();
+    }
 }
 
 void MainWindow::action_revert() {

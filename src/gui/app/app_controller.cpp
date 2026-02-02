@@ -36,9 +36,12 @@ AppController::AppController(IRenderBackend& backend)
 }
 
 AppController::~AppController() {
-    // Destroy texture if exists
+    // Destroy textures
     if (m_state.preview_texture.valid()) {
         m_backend.destroy_texture(m_state.preview_texture);
+    }
+    if (m_state.batch.thumbnail_texture.valid()) {
+        m_backend.destroy_texture(m_state.batch.thumbnail_texture);
     }
 }
 
@@ -373,17 +376,60 @@ void AppController::toggle_preview() {
 // Batch Operations
 // =============================================================================
 
-void AppController::add_batch_files(std::span<const std::filesystem::path> files) {
+void AppController::enter_batch_mode(std::span<const std::filesystem::path> files) {
+    // Clean up previous batch thumbnail
+    if (m_state.batch.thumbnail_texture.valid()) {
+        m_backend.destroy_texture(m_state.batch.thumbnail_texture);
+        m_state.batch.thumbnail_texture = TextureHandle{};
+    }
+    m_state.batch.clear();
+
+    // Filter supported files
     for (const auto& file : files) {
         if (is_supported_extension(file) && std::filesystem::is_regular_file(file)) {
-            m_state.batch.files.push_back(file);
+            BatchFileResult result;
+            result.path = file;
+            result.status = BatchFileStatus::Pending;
+            m_state.batch.files.push_back(std::move(result));
         }
     }
-    spdlog::info("Batch queue: {} files", m_state.batch.files.size());
+
+    if (m_state.batch.files.empty()) {
+        spdlog::warn("No supported image files found in dropped files");
+        return;
+    }
+
+    spdlog::info("Entering batch mode: {} files", m_state.batch.files.size());
+
+    // Default to Auto Detect in batch mode
+    m_state.process_options.size_mode = WatermarkSizeMode::Auto;
+    m_state.process_options.force_size = std::nullopt;
+
+    // Clear single-image state (batch replaces it)
+    if (m_state.preview_texture.valid()) {
+        m_backend.destroy_texture(m_state.preview_texture);
+        m_state.preview_texture = TextureHandle{};
+    }
+    m_state.image.clear();
+    m_state.custom_watermark.clear();
+    m_state.watermark_info.reset();
+    m_state.state = ProcessState::Idle;
+
+    // Generate thumbnail atlas
+    generate_thumbnail_atlas();
+
+    m_state.status_message = fmt::format("Batch: {} files ready", m_state.batch.files.size());
 }
 
-void AppController::set_batch_output_dir(const std::filesystem::path& dir) {
-    m_state.batch.output_dir = dir;
+void AppController::exit_batch_mode() {
+    // Destroy batch thumbnail texture
+    if (m_state.batch.thumbnail_texture.valid()) {
+        m_backend.destroy_texture(m_state.batch.thumbnail_texture);
+        m_state.batch.thumbnail_texture = TextureHandle{};
+    }
+    m_state.batch.clear();
+    m_state.status_message = "Ready";
+    spdlog::info("Exited batch mode");
 }
 
 void AppController::start_batch_processing() {
@@ -394,56 +440,85 @@ void AppController::start_batch_processing() {
 
     m_state.batch.current_index = 0;
     m_state.batch.success_count = 0;
+    m_state.batch.skip_count = 0;
     m_state.batch.fail_count = 0;
     m_state.batch.in_progress = true;
     m_state.batch.cancel_requested = false;
 
-    spdlog::info("Starting batch processing: {} files", m_state.batch.files.size());
+    // Reset all file statuses
+    for (auto& f : m_state.batch.files) {
+        f.status = BatchFileStatus::Pending;
+        f.confidence = 0.0f;
+        f.message.clear();
+    }
+
+    spdlog::info("Starting batch processing: {} files (threshold: {:.0f}%)",
+                 m_state.batch.files.size(),
+                 m_state.batch.detection_threshold * 100.0f);
 }
 
 bool AppController::process_batch_next() {
     if (!m_state.batch.in_progress) return false;
     if (m_state.batch.cancel_requested) {
         m_state.batch.in_progress = false;
-        m_state.status_message = "Batch cancelled";
+        m_state.status_message = fmt::format("Batch cancelled ({}/{})",
+                                              m_state.batch.current_index,
+                                              m_state.batch.files.size());
         return false;
     }
     if (m_state.batch.current_index >= m_state.batch.files.size()) {
         m_state.batch.in_progress = false;
-        m_state.status_message = fmt::format("Batch complete: {} ok, {} failed",
+        m_state.status_message = fmt::format("Batch complete: {} ok, {} skipped, {} failed",
                                               m_state.batch.success_count,
+                                              m_state.batch.skip_count,
                                               m_state.batch.fail_count);
+        spdlog::info("{}", m_state.status_message);
+
+        // Regenerate thumbnail atlas to show processed results
+        generate_thumbnail_atlas();
+
         return false;
     }
 
-    const auto& input = m_state.batch.files[m_state.batch.current_index];
+    auto& file_result = m_state.batch.files[m_state.batch.current_index];
+    file_result.status = BatchFileStatus::Processing;
 
-    // Determine output path
-    std::filesystem::path output;
-    if (m_state.batch.output_dir) {
-        output = *m_state.batch.output_dir / input.filename();
-    } else {
-        output = input;  // In-place
-    }
+    const auto& input = file_result.path;
 
-    // Process
+    // Output = overwrite original (same as CLI simple mode)
+    std::filesystem::path output = input;
+
+    // Process using core process_image with detection
     auto proc_result = process_image(
         input, output,
         m_state.process_options.remove_mode,
         *m_engine,
-        m_state.process_options.force_size
+        m_state.process_options.force_size,
+        m_state.batch.use_detection,
+        m_state.batch.detection_threshold
     );
 
-    if (proc_result.success) {
+    file_result.confidence = proc_result.confidence;
+    file_result.message = proc_result.message;
+
+    if (proc_result.skipped) {
+        file_result.status = BatchFileStatus::Skipped;
+        m_state.batch.skip_count++;
+    } else if (proc_result.success) {
+        file_result.status = BatchFileStatus::OK;
         m_state.batch.success_count++;
     } else {
+        file_result.status = BatchFileStatus::Failed;
         m_state.batch.fail_count++;
     }
 
     m_state.batch.current_index++;
-    m_state.status_message = fmt::format("Batch: {}/{}",
+    m_state.status_message = fmt::format("Batch: {}/{} (OK:{} Skip:{} Fail:{})",
                                           m_state.batch.current_index,
-                                          m_state.batch.files.size());
+                                          m_state.batch.files.size(),
+                                          m_state.batch.success_count,
+                                          m_state.batch.skip_count,
+                                          m_state.batch.fail_count);
 
     return m_state.batch.current_index < m_state.batch.files.size();
 }
@@ -452,8 +527,101 @@ void AppController::cancel_batch() {
     m_state.batch.cancel_requested = true;
 }
 
-void AppController::clear_batch() {
-    m_state.batch.clear();
+// =============================================================================
+// Batch Helpers
+// =============================================================================
+
+void AppController::generate_thumbnail_atlas() {
+    using namespace batch_theme;
+
+    auto& batch = m_state.batch;
+    if (batch.files.empty()) return;
+
+    const int cell_size   = kThumbnailCellSize;
+    const int label_h     = kLabelHeight;
+    const int pad         = kCellPadding;
+    const int gap_v       = kCellGapV;
+    const int thumb_h     = cell_size - label_h;
+    int count = static_cast<int>(std::min(batch.files.size(),
+                                          static_cast<size_t>(kThumbnailMaxCount)));
+
+    // Grid layout
+    batch.thumbnail_cols = kThumbnailCols;
+    batch.thumbnail_rows = (count + batch.thumbnail_cols - 1) / batch.thumbnail_cols;
+
+    // Atlas dimensions (with vertical gaps between rows)
+    int atlas_w = batch.thumbnail_cols * cell_size;
+    int atlas_h = batch.thumbnail_rows * cell_size
+                + (batch.thumbnail_rows > 0 ? (batch.thumbnail_rows - 1) * gap_v : 0);
+
+    // Create atlas (RGBA)
+    cv::Mat atlas(atlas_h, atlas_w, CV_8UC4,
+                  cv::Scalar(kAtlasBgR, kAtlasBgG, kAtlasBgB, kAtlasBgA));
+
+    for (int i = 0; i < count; ++i) {
+        int col = i % batch.thumbnail_cols;
+        int row = i / batch.thumbnail_cols;
+
+        int cell_x = col * cell_size;
+        int cell_y = row * (cell_size + gap_v);
+
+        // Draw cell background
+        cv::rectangle(atlas,
+            cv::Rect(cell_x + pad, cell_y + pad,
+                     cell_size - pad * 2, cell_size - pad * 2),
+            cv::Scalar(kCellBgR, kCellBgG, kCellBgB, kCellBgA), cv::FILLED);
+
+        cv::Mat thumb = cv::imread(batch.files[i].path.string(), cv::IMREAD_COLOR);
+        if (thumb.empty()) continue;
+
+        // Fit thumbnail maintaining aspect ratio (above label area)
+        int avail_w = cell_size - pad * 2;
+        int avail_h = thumb_h - pad * 2;
+        float scale = std::min(
+            static_cast<float>(avail_w) / thumb.cols,
+            static_cast<float>(avail_h) / thumb.rows
+        );
+        int tw = static_cast<int>(thumb.cols * scale);
+        int th = static_cast<int>(thumb.rows * scale);
+
+        cv::Mat resized;
+        cv::resize(thumb, resized, cv::Size(tw, th), 0, 0, cv::INTER_AREA);
+
+        cv::Mat rgba;
+        cv::cvtColor(resized, rgba, cv::COLOR_BGR2RGBA);
+
+        // Center image within cell
+        int ox = cell_x + (cell_size - tw) / 2;
+        int oy = cell_y + pad + (avail_h - th) / 2;
+
+        cv::Rect roi(ox, oy, tw, th);
+        if (roi.x >= 0 && roi.y >= 0 &&
+            roi.x + roi.width <= atlas_w && roi.y + roi.height <= atlas_h) {
+            rgba.copyTo(atlas(roi));
+        }
+
+        // Thin border
+        cv::rectangle(atlas, roi,
+            cv::Scalar(kCellBorderR, kCellBorderG, kCellBorderB, kCellBorderA), 1);
+    }
+
+    // Upload atlas as texture
+    TextureDesc desc;
+    desc.width = atlas_w;
+    desc.height = atlas_h;
+    desc.format = TextureFormat::RGBA8;
+
+    std::span<const uint8_t> data(atlas.data, atlas.total() * atlas.elemSize());
+
+    if (batch.thumbnail_texture.valid()) {
+        m_backend.destroy_texture(batch.thumbnail_texture);
+    }
+
+    batch.thumbnail_texture = m_backend.create_texture(desc, data);
+    batch.thumbnails_ready = batch.thumbnail_texture.valid();
+
+    spdlog::info("Thumbnail atlas generated: {}x{} ({} thumbs, {}px cells, gap {}px)",
+                 atlas_w, atlas_h, count, cell_size, gap_v);
 }
 
 // =============================================================================
@@ -474,6 +642,10 @@ void AppController::invalidate_texture() {
 
 void* AppController::get_preview_texture_id() const {
     return m_backend.get_imgui_texture_id(m_state.preview_texture);
+}
+
+void* AppController::get_batch_thumbnail_texture_id() const {
+    return m_backend.get_imgui_texture_id(m_state.batch.thumbnail_texture);
 }
 
 // =============================================================================
