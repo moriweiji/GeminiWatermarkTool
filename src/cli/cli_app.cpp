@@ -28,33 +28,11 @@
 #include <algorithm>
 #include <string>
 
-#ifdef _WIN32
-    #include <windows.h>
-#endif
-
 namespace fs = std::filesystem;
 
 namespace gwt::cli {
 
 namespace {
-
-// =============================================================================
-// Platform-specific console setup
-// =============================================================================
-
-void setup_console() {
-#ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut != INVALID_HANDLE_VALUE) {
-        DWORD dwMode = 0;
-        if (GetConsoleMode(hOut, &dwMode)) {
-            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-            SetConsoleMode(hOut, dwMode);
-        }
-    }
-#endif
-}
 
 // =============================================================================
 // Logo and Banner printing
@@ -116,11 +94,11 @@ void process_single(
     if (proc_result.skipped) {
         result.skipped++;
         fmt::print(fmt::fg(fmt::color::yellow), "[SKIP] ");
-        fmt::print("{}: {}\n", input.filename().string(), proc_result.message);
+        fmt::print("{}: {}\n", gwt::filename_utf8(input), proc_result.message);
     } else if (proc_result.success) {
         result.success++;
         fmt::print(fmt::fg(fmt::color::green), "[OK] ");
-        fmt::print("{}", input.filename().string());
+        fmt::print("{}", gwt::filename_utf8(input));
         if (proc_result.confidence > 0) {
             fmt::print(fmt::fg(fmt::color::gray), " ({:.0f}% confidence)",
                        proc_result.confidence * 100.0f);
@@ -129,7 +107,7 @@ void process_single(
     } else {
         result.failed++;
         fmt::print(fmt::fg(fmt::color::red), "[FAIL] ");
-        fmt::print("{}: {}\n", input.filename().string(), proc_result.message);
+        fmt::print("{}: {}\n", gwt::filename_utf8(input), proc_result.message);
     }
 }
 
@@ -151,7 +129,6 @@ bool is_simple_mode(int argc, char** argv) {
 }
 
 int run_simple_mode(int argc, char** argv) {
-    setup_console();
     print_banner();
 
     auto logger = spdlog::stdout_color_mt("gwt");
@@ -179,14 +156,16 @@ int run_simple_mode(int argc, char** argv) {
 
             if (!fs::exists(input)) {
                 fmt::print(fmt::fg(fmt::color::red), "[ERROR] ");
-                fmt::print("File not found: {}\n", argv[i]);
+                fmt::print("File not found: {}\n", gwt::to_utf8(input));
+                fmt::print(fmt::fg(fmt::color::gray),
+                           "  (Path may contain encoding issues on Windows without UTF-8 beta)\n");
                 result.failed++;
                 continue;
             }
 
             if (fs::is_directory(input)) {
                 fmt::print(fmt::fg(fmt::color::red), "[ERROR] ");
-                fmt::print("Directory not supported in simple mode: {}\n", argv[i]);
+                fmt::print("Directory not supported in simple mode: {}\n", gwt::to_utf8(input));
                 fmt::print("  Use: gwt -i <dir> -o <dir>\n");
                 result.failed++;
                 continue;
@@ -210,8 +189,6 @@ int run(int argc, char** argv) {
         return run_simple_mode(argc, argv);
     }
 
-    setup_console();
-
     CLI::App app{"Gemini Watermark Tool (Standalone) - Remove visible watermarks"};
     app.footer("\nSimple usage: GeminiWatermarkTool <image>  (in-place edit with auto-detection)");
     print_banner();
@@ -223,8 +200,8 @@ int run(int argc, char** argv) {
     std::string output_path;
 
     app.add_option("-i,--input", input_path, "Input image file or directory")
-        ->required()
-        ->check(CLI::ExistingPath);
+        ->required();
+        // Note: We check existence manually below for better CJK path error messages
 
     app.add_option("-o,--output", output_path, "Output image file or directory")
         ->required();
@@ -308,6 +285,17 @@ int run(int argc, char** argv) {
 
         fs::path input(input_path);
         fs::path output(output_path);
+
+        // Manual existence check with better error messages for CJK paths
+        if (!fs::exists(input)) {
+            fmt::print(fmt::fg(fmt::color::red), "[ERROR] ");
+            fmt::print("Input path not found: {}\n", gwt::to_utf8(input));
+            fmt::print(fmt::fg(fmt::color::gray),
+                       "  (If the path contains CJK characters, try enabling Windows UTF-8 beta\n");
+            fmt::print(fmt::fg(fmt::color::gray),
+                       "   or use the GUI version which handles Unicode paths correctly)\n");
+            return 1;
+        }
 
         BatchResult result;
 

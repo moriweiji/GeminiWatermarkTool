@@ -23,7 +23,35 @@
 #include <string_view>
 #include <cstring>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace {
+
+// =============================================================================
+// Platform-specific console setup
+// =============================================================================
+
+void setup_console() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD dwMode = 0;
+        if (GetConsoleMode(hOut, &dwMode)) {
+            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(hOut, dwMode);
+        }
+    }
+#endif
+}
 
 /**
  * Check if GUI mode should be launched
@@ -70,6 +98,10 @@ void filter_gui_flags([[maybe_unused]] int& argc, [[maybe_unused]] char** argv) 
 }  // anonymous namespace
 
 int main(int argc, char** argv) {
+
+    // Set up console for platforms
+    setup_console();
+
     // Check if GUI mode should be launched
     if (should_launch_gui(argc, argv)) {
 #if defined(GWT_HAS_GUI)
