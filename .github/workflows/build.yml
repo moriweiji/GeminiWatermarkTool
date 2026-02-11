@@ -124,6 +124,8 @@ jobs:
       run: |
         cmake -B build-x64 -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_GUI=ON \
+          -DVCPKG_MANIFEST_FEATURES=gui \
           -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
           -DVCPKG_TARGET_TRIPLET=x64-osx \
           -DCMAKE_OSX_ARCHITECTURES=x86_64
@@ -133,6 +135,8 @@ jobs:
       run: |
         cmake -B build-arm64 -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_GUI=ON \
+          -DVCPKG_MANIFEST_FEATURES=gui \
           -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
           -DVCPKG_TARGET_TRIPLET=arm64-osx \
           -DCMAKE_OSX_ARCHITECTURES=arm64
