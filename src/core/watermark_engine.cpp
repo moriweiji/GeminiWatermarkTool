@@ -482,8 +482,8 @@ ProcessResult process_image(
     result.confidence = 0.0f;
 
     try {
-        // Read image
-        cv::Mat image = cv::imread(input_path.string(), cv::IMREAD_COLOR);
+        // Read image (use UTF-8 aware function for Windows)
+        cv::Mat image = gwt::imread_utf8(input_path, cv::IMREAD_COLOR);
         if (image.empty()) {
             result.message = "Failed to load image";
             spdlog::error("Failed to load image: {}", input_path);
@@ -541,8 +541,8 @@ ProcessResult process_image(
             params = {cv::IMWRITE_WEBP_QUALITY, 101};
         }
 
-        // Write output
-        bool write_success = cv::imwrite(output_path.string(), image, params);
+        // Write output (use UTF-8 aware function for Windows)
+        bool write_success = gwt::imwrite_utf8(output_path, image, params);
         if (!write_success) {
             result.message = "Failed to write image";
             spdlog::error("Failed to write image: {}", output_path);

@@ -54,8 +54,8 @@ AppController::~AppController() {
 bool AppController::load_image(const std::filesystem::path& path) {
     spdlog::info("Loading image: {}", path);
 
-    // Read image first to validate
-    cv::Mat image = cv::imread(path.string(), cv::IMREAD_COLOR);
+    // Read image first to validate (use UTF-8 aware function for Windows)
+    cv::Mat image = imread_utf8(path, cv::IMREAD_COLOR);
     if (image.empty()) {
         m_state.state = ProcessState::Error;
         m_state.error_message = "Failed to load image: " + to_utf8(path);
@@ -129,7 +129,7 @@ bool AppController::save_image(const std::filesystem::path& path) {
     }
 
     // Write currently displayed image (WYSIWYG - What You See Is What You Get)
-    bool success = cv::imwrite(path.string(), m_state.image.display, params);
+    bool success = imwrite_utf8(path, m_state.image.display, params);
 
     if (success) {
         m_state.status_message = TRF(i18n::keys::STATUS_SAVED, filename_utf8(path));
@@ -573,7 +573,7 @@ void AppController::generate_thumbnail_atlas() {
                      cell_size - pad * 2, cell_size - pad * 2),
             cv::Scalar(kCellBgR, kCellBgG, kCellBgB, kCellBgA), cv::FILLED);
 
-        cv::Mat thumb = cv::imread(batch.files[i].path.string(), cv::IMREAD_COLOR);
+        cv::Mat thumb = imread_utf8(batch.files[i].path, cv::IMREAD_COLOR);
         if (thumb.empty()) continue;
 
         // Fit thumbnail maintaining aspect ratio (above label area)

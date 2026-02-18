@@ -104,6 +104,85 @@ inline std::filesystem::path path_from_utf8(const char* utf8_str) {
 inline std::filesystem::path path_from_utf8(const std::string& utf8_str) {
     return path_from_utf8(utf8_str.c_str());
 }
+
+}  // namespace gwt
+
+// =============================================================================
+// OpenCV UTF-8 path support for Windows
+// =============================================================================
+
+#include <opencv2/opencv.hpp>
+#include <fstream>
+
+namespace gwt {
+
+/**
+ * Read image from path with UTF-8 support on Windows
+ *
+ * OpenCV's imread() on Windows uses ANSI encoding, which fails for
+ * non-ASCII paths (CJK characters, etc.). This function reads the file
+ * as binary and uses imdecode() to properly handle UTF-8 paths.
+ *
+ * @param path   Filesystem path to the image
+ * @param flags  OpenCV imread flags (default: IMREAD_COLOR)
+ * @return       Loaded cv::Mat, or empty Mat on failure
+ */
+inline cv::Mat imread_utf8(const std::filesystem::path& path, int flags = cv::IMREAD_COLOR) {
+#ifdef _WIN32
+    // On Windows, read file as binary and decode
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        return cv::Mat();
+    }
+
+    auto size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(static_cast<size_t>(size));
+    if (!file.read(buffer.data(), size)) {
+        return cv::Mat();
+    }
+
+    return cv::imdecode(cv::Mat(1, static_cast<int>(buffer.size()), CV_8UC1, buffer.data()), flags);
+#else
+    // Linux/macOS: imread works with UTF-8 natively
+    return cv::imread(path.string(), flags);
+#endif
+}
+
+/**
+ * Write image to path with UTF-8 support on Windows
+ *
+ * @param path   Filesystem path to save the image
+ * @param img    Image to save
+ * @param params Optional encoding parameters
+ * @return       true on success, false on failure
+ */
+inline bool imwrite_utf8(const std::filesystem::path& path,
+                         const cv::Mat& img,
+                         const std::vector<int>& params = {}) {
+#ifdef _WIN32
+    // Encode image to memory buffer
+    std::string ext = path.extension().string();
+    std::vector<uchar> buffer;
+    if (!cv::imencode(ext, img, buffer, params)) {
+        return false;
+    }
+
+    // Write buffer to file using wide path
+    std::ofstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    file.write(reinterpret_cast<const char*>(buffer.data()),
+               static_cast<std::streamsize>(buffer.size()));
+    return file.good();
+#else
+    return cv::imwrite(path.string(), img, params);
+#endif
+}
+
 }  // namespace gwt
 
 // =============================================================================
