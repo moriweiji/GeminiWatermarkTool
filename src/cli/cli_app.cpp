@@ -33,6 +33,9 @@
 // TTY detection (cross-platform)
 #ifdef _WIN32
     #include <io.h>
+    #ifndef NOMINMAX
+        #define NOMINMAX  // Prevent windows.h from defining min/max macros
+    #endif
     #include <windows.h>
     #ifndef STDIN_FILENO
         #define STDIN_FILENO 0

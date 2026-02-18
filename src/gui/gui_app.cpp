@@ -29,6 +29,9 @@
 
 // Platform-specific headers for executable path
 #ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX  // Prevent windows.h from defining min/max macros
+    #endif
     #include <windows.h>
 #elif __APPLE__
     #include <mach-o/dyld.h>
