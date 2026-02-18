@@ -12,6 +12,13 @@
  * that don't have Gemini watermarks (protecting original images).
  */
 
+// Must be defined before any Windows headers
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+#endif
+
 #include "cli/cli_app.hpp"
 #include "core/watermark_engine.hpp"
 #include "utils/ascii_logo.hpp"
@@ -33,9 +40,6 @@
 // TTY detection (cross-platform)
 #ifdef _WIN32
     #include <io.h>
-    #ifndef NOMINMAX
-        #define NOMINMAX  // Prevent windows.h from defining min/max macros
-    #endif
     #include <windows.h>
     #ifndef STDIN_FILENO
         #define STDIN_FILENO 0

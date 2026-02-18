@@ -5,6 +5,13 @@
  * @license MIT
  */
 
+// Must be defined before any Windows headers (including those from SDL/ImGui)
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+#endif
+
 #include "gui/gui_app.hpp"
 #include "gui/backend/render_backend.hpp"
 #include "gui/app/app_controller.hpp"
@@ -29,9 +36,6 @@
 
 // Platform-specific headers for executable path
 #ifdef _WIN32
-    #ifndef NOMINMAX
-        #define NOMINMAX  // Prevent windows.h from defining min/max macros
-    #endif
     #include <windows.h>
 #elif __APPLE__
     #include <mach-o/dyld.h>
