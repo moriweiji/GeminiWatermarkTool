@@ -27,6 +27,13 @@
 #include <string>
 #include <vector>
 
+// Platform-specific headers for executable path
+#ifdef _WIN32
+    #include <windows.h>
+#elif __APPLE__
+    #include <mach-o/dyld.h>
+#endif
+
 namespace gwt::gui {
 
 namespace {
@@ -37,33 +44,59 @@ constexpr int kDefaultHeight = 1250;
 constexpr int kMinWidth = 1030;
 constexpr int kMinHeight = 888;
 
+// Get executable directory (cross-platform)
+std::filesystem::path get_executable_dir() {
+#ifdef _WIN32
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    return std::filesystem::path(path).parent_path();
+#elif __APPLE__
+    char path[1024];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        return std::filesystem::canonical(path).parent_path();
+    }
+    return std::filesystem::current_path();
+#else
+    // Linux: read /proc/self/exe
+    return std::filesystem::canonical("/proc/self/exe").parent_path();
+#endif
+}
+
 // Find language directory relative to executable
 std::filesystem::path find_lang_dir() {
-    // 1. Check executable directory
-    auto exe_dir = std::filesystem::current_path();
+    // 1. Check executable directory (primary location for release builds)
+    auto exe_dir = get_executable_dir();
     if (std::filesystem::exists(exe_dir / "lang" / "en.json")) {
         return exe_dir / "lang";
     }
 
-    // 2. Check resources directory (development)
-    if (std::filesystem::exists("resources/lang/en.json")) {
-        return "resources/lang";
+    // 2. Check current working directory (for development)
+    auto cwd = std::filesystem::current_path();
+    if (std::filesystem::exists(cwd / "lang" / "en.json")) {
+        return cwd / "lang";
     }
 
-    // 3. Check parent directory (some build configurations)
+    // 3. Check resources directory (development from project root)
+    if (std::filesystem::exists(cwd / "resources" / "lang" / "en.json")) {
+        return cwd / "resources" / "lang";
+    }
+
+    // 4. Check parent directory (some build configurations)
     if (std::filesystem::exists(exe_dir.parent_path() / "lang" / "en.json")) {
         return exe_dir.parent_path() / "lang";
     }
 
 #ifdef __linux__
-    // 4. Check system install location (Linux)
+    // 5. Check system install location (Linux)
     if (std::filesystem::exists("/usr/share/gemini-watermark-tool/lang/en.json")) {
         return "/usr/share/gemini-watermark-tool/lang";
     }
 #endif
 
-    // Fallback
-    return "lang";
+    // Fallback - return exe_dir/lang even if it doesn't exist
+    // (will fail gracefully with fallback strings)
+    return exe_dir / "lang";
 }
 
 // Parse backend type from command line

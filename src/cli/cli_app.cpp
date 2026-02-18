@@ -33,12 +33,16 @@
 // TTY detection (cross-platform)
 #ifdef _WIN32
     #include <io.h>
+    #include <windows.h>
     #ifndef STDIN_FILENO
         #define STDIN_FILENO 0
         #define STDOUT_FILENO 1
         #define STDERR_FILENO 2
     #endif
     #define isatty _isatty
+#elif __APPLE__
+    #include <unistd.h>
+    #include <mach-o/dyld.h>
 #else
     #include <unistd.h>
 #endif
@@ -53,33 +57,58 @@ namespace {
 // i18n Initialization
 // =============================================================================
 
+// Get executable directory (cross-platform)
+fs::path get_executable_dir() {
+#ifdef _WIN32
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    return fs::path(path).parent_path();
+#elif __APPLE__
+    char path[1024];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        return fs::canonical(path).parent_path();
+    }
+    return fs::current_path();
+#else
+    // Linux: read /proc/self/exe
+    return fs::canonical("/proc/self/exe").parent_path();
+#endif
+}
+
 // Find language directory relative to executable
 fs::path find_lang_dir() {
-    // 1. Check executable directory
-    auto exe_dir = fs::current_path();
+    // 1. Check executable directory (primary location for release builds)
+    auto exe_dir = get_executable_dir();
     if (fs::exists(exe_dir / "lang" / "en.json")) {
         return exe_dir / "lang";
     }
 
-    // 2. Check resources directory (development)
-    if (fs::exists("resources/lang/en.json")) {
-        return "resources/lang";
+    // 2. Check current working directory (for development)
+    auto cwd = fs::current_path();
+    if (fs::exists(cwd / "lang" / "en.json")) {
+        return cwd / "lang";
     }
 
-    // 3. Check parent directory (some build configurations)
+    // 3. Check resources directory (development from project root)
+    if (fs::exists(cwd / "resources" / "lang" / "en.json")) {
+        return cwd / "resources" / "lang";
+    }
+
+    // 4. Check parent directory (some build configurations)
     if (fs::exists(exe_dir.parent_path() / "lang" / "en.json")) {
         return exe_dir.parent_path() / "lang";
     }
 
 #ifdef __linux__
-    // 4. Check system install location (Linux)
+    // 5. Check system install location (Linux)
     if (fs::exists("/usr/share/gemini-watermark-tool/lang/en.json")) {
         return "/usr/share/gemini-watermark-tool/lang";
     }
 #endif
 
-    // Fallback
-    return "lang";
+    // Fallback - return exe_dir/lang even if it doesn't exist
+    return exe_dir / "lang";
 }
 
 // Initialize i18n (called once at startup)
