@@ -9,6 +9,8 @@
 #include "core/watermark_detector.hpp"
 #include "embedded_assets.hpp"
 #include "utils/path_formatter.hpp"
+#include "i18n/i18n.hpp"
+#include "i18n/keys.hpp"
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -57,7 +59,7 @@ bool AppController::load_image(const std::filesystem::path& path) {
     if (image.empty()) {
         m_state.state = ProcessState::Error;
         m_state.error_message = "Failed to load image: " + to_utf8(path);
-        m_state.status_message = "Load failed";
+        m_state.status_message = TR(i18n::keys::STATUS_LOAD_FAILED);
         spdlog::error("{}", m_state.error_message);
         return false;
     }
@@ -90,7 +92,7 @@ bool AppController::load_image(const std::filesystem::path& path) {
 
     // Update state
     m_state.state = ProcessState::Loaded;
-    m_state.status_message = fmt::format("Loaded: {}x{}", image.cols, image.rows);
+    m_state.status_message = TRF(i18n::keys::STATUS_LOADED, image.cols, image.rows);
     m_state.error_message.clear();
 
     spdlog::info("Image loaded: {}x{} ({} channels)",
@@ -130,11 +132,11 @@ bool AppController::save_image(const std::filesystem::path& path) {
     bool success = cv::imwrite(path.string(), m_state.image.display, params);
 
     if (success) {
-        m_state.status_message = "Saved: " + filename_utf8(path);
+        m_state.status_message = TRF(i18n::keys::STATUS_SAVED, filename_utf8(path));
         spdlog::info("Image saved: {}", path);
     } else {
         m_state.error_message = "Failed to save: " + to_utf8(path);
-        m_state.status_message = "Save failed";
+        m_state.status_message = TR(i18n::keys::STATUS_SAVE_FAILED);
         spdlog::error("{}", m_state.error_message);
     }
 
@@ -163,7 +165,7 @@ void AppController::process_current() {
     }
 
     m_state.state = ProcessState::Processing;
-    m_state.status_message = "Processing...";
+    m_state.status_message = TR(i18n::keys::STATUS_PROCESSING);
 
     try {
         // Clone original for processing
@@ -209,14 +211,14 @@ void AppController::process_current() {
 
         m_state.state = ProcessState::Completed;
         m_state.status_message = m_state.process_options.remove_mode
-            ? "Watermark removed"
-            : "Watermark added";
+            ? TR(i18n::keys::STATUS_REMOVED)
+            : TR(i18n::keys::STATUS_ADDED);
         m_state.error_message.clear();
 
     } catch (const std::exception& e) {
         m_state.state = ProcessState::Error;
         m_state.error_message = e.what();
-        m_state.status_message = "Processing failed";
+        m_state.status_message = TR(i18n::keys::STATUS_PROCESS_FAILED);
         spdlog::error("Processing failed: {}", e.what());
     }
 }
@@ -227,7 +229,7 @@ void AppController::revert_to_original() {
     m_state.preview_options.show_processed = false;
     update_display_image();
 
-    m_state.status_message = "Reverted to original";
+    m_state.status_message = TR(i18n::keys::STATUS_REVERTED);
 }
 
 // =============================================================================
@@ -319,7 +321,7 @@ void AppController::detect_custom_watermark() {
     if (!m_state.image.has_image()) return;
 
     m_state.custom_watermark.detection_attempted = true;
-    m_state.status_message = "Detecting watermark...";
+    m_state.status_message = TR(i18n::keys::STATUS_DETECTING);
 
     // Run detection
     auto result = detect_watermark_region(m_state.image.original);
@@ -330,8 +332,8 @@ void AppController::detect_custom_watermark() {
         m_state.custom_watermark.detection_confidence = result->confidence;
         m_state.process_options.custom_region = result->region;
 
-        m_state.status_message = fmt::format("Detected watermark ({:.0f}% confidence)",
-                                              result->confidence * 100.0f);
+        m_state.status_message = TRF(i18n::keys::STATUS_DETECTED,
+                                     static_cast<int>(result->confidence * 100.0f));
 
         spdlog::info("Auto-detected watermark: ({},{}) {}x{} confidence={:.2f} "
                      "(spatial={:.2f}, grad={:.2f}, var={:.2f})",
@@ -350,10 +352,10 @@ void AppController::detect_custom_watermark() {
         m_state.process_options.custom_region = fallback;
 
         if (result) {
-            m_state.status_message = fmt::format("No watermark detected ({:.0f}%), using default",
-                                                  result->confidence * 100.0f);
+            m_state.status_message = TRF(i18n::keys::STATUS_NOT_DETECTED,
+                                         static_cast<int>(result->confidence * 100.0f));
         } else {
-            m_state.status_message = "Detection failed, using default position";
+            m_state.status_message = TR(i18n::keys::STATUS_DETECTION_FAILED);
         }
         spdlog::info("Detection: not found, using fallback: ({},{}) {}x{}",
                      fallback.x, fallback.y, fallback.width, fallback.height);
@@ -418,7 +420,7 @@ void AppController::enter_batch_mode(std::span<const std::filesystem::path> file
     // Generate thumbnail atlas
     generate_thumbnail_atlas();
 
-    m_state.status_message = fmt::format("Batch: {} files ready", m_state.batch.files.size());
+    m_state.status_message = TRF(i18n::keys::STATUS_BATCH_READY, m_state.batch.files.size());
 }
 
 void AppController::exit_batch_mode() {
@@ -428,7 +430,7 @@ void AppController::exit_batch_mode() {
         m_state.batch.thumbnail_texture = TextureHandle{};
     }
     m_state.batch.clear();
-    m_state.status_message = "Ready";
+    m_state.status_message = TR(i18n::keys::STATUS_READY);
     spdlog::info("Exited batch mode");
 }
 
@@ -461,17 +463,17 @@ bool AppController::process_batch_next() {
     if (!m_state.batch.in_progress) return false;
     if (m_state.batch.cancel_requested) {
         m_state.batch.in_progress = false;
-        m_state.status_message = fmt::format("Batch cancelled ({}/{})",
-                                              m_state.batch.current_index,
-                                              m_state.batch.files.size());
+        m_state.status_message = TRF(i18n::keys::STATUS_BATCH_CANCELLED,
+                                     m_state.batch.current_index,
+                                     m_state.batch.files.size());
         return false;
     }
     if (m_state.batch.current_index >= m_state.batch.files.size()) {
         m_state.batch.in_progress = false;
-        m_state.status_message = fmt::format("Batch complete: {} ok, {} skipped, {} failed",
-                                              m_state.batch.success_count,
-                                              m_state.batch.skip_count,
-                                              m_state.batch.fail_count);
+        m_state.status_message = TRF(i18n::keys::STATUS_BATCH_COMPLETE,
+                                     m_state.batch.success_count,
+                                     m_state.batch.skip_count,
+                                     m_state.batch.fail_count);
         spdlog::info("{}", m_state.status_message);
 
         // Regenerate thumbnail atlas to show processed results
@@ -513,12 +515,12 @@ bool AppController::process_batch_next() {
     }
 
     m_state.batch.current_index++;
-    m_state.status_message = fmt::format("Batch: {}/{} (OK:{} Skip:{} Fail:{})",
-                                          m_state.batch.current_index,
-                                          m_state.batch.files.size(),
-                                          m_state.batch.success_count,
-                                          m_state.batch.skip_count,
-                                          m_state.batch.fail_count);
+    m_state.status_message = TRF(i18n::keys::STATUS_BATCH_PROGRESS,
+                                 m_state.batch.current_index,
+                                 m_state.batch.files.size(),
+                                 m_state.batch.success_count,
+                                 m_state.batch.skip_count,
+                                 m_state.batch.fail_count);
 
     return m_state.batch.current_index < m_state.batch.files.size();
 }

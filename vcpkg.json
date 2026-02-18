@@ -13,7 +13,12 @@
     },
     "fmt",
     "cli11",
-    "spdlog"
+    "spdlog",
+    "nlohmann-json",
+    {
+      "name": "gtest",
+      "host": true
+    }
   ],
   "features": {
     "gui": {

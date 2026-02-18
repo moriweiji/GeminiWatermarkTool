@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(BUILD_GUI "Build with ImGui GUI support" OFF)
 option(ENABLE_D3D11 "Enable Direct3D 11 backend (Windows only, requires BUILD_GUI)" OFF)
 option(ENABLE_VULKAN "Enable Vulkan backend (requires BUILD_GUI)" OFF)
+option(BUILD_TESTS "Build unit tests" OFF)
 
 # Validate options
 if(ENABLE_D3D11 AND NOT BUILD_GUI)
@@ -160,6 +161,13 @@ find_package(OpenCV REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+
+# Test Dependencies
+if(BUILD_TESTS)
+    find_package(GTest CONFIG REQUIRED)
+    enable_testing()
+endif()
 
 # GUI Dependencies
 if(BUILD_GUI)
@@ -208,6 +216,16 @@ set(CLI_HEADERS
 set(UTILS_HEADERS
     src/utils/ascii_logo.hpp
     src/utils/path_formatter.hpp
+)
+
+# i18n sources
+set(I18N_SOURCES
+    src/i18n/i18n.cpp
+)
+
+set(I18N_HEADERS
+    src/i18n/i18n.hpp
+    src/i18n/keys.hpp
 )
 
 # Main entry point
@@ -268,6 +286,8 @@ add_executable(${PROJECT_NAME} ${WIN32_EXECUTABLE}
     ${CLI_SOURCES}
     ${CLI_HEADERS}
     ${UTILS_HEADERS}
+    ${I18N_SOURCES}
+    ${I18N_HEADERS}
     ${WIN_RESOURCE_FILE}
 )
 
@@ -294,6 +314,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     fmt::fmt
     CLI11::CLI11
     spdlog::spdlog
+    nlohmann_json::nlohmann_json
 )
 
 if(BUILD_GUI)
@@ -352,6 +373,43 @@ endif()
 # =============================================================================
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
+# Install language files
+install(DIRECTORY resources/lang DESTINATION share/${PROJECT_NAME})
+
+# =============================================================================
+# Unit Tests
+# =============================================================================
+if(BUILD_TESTS)
+    add_executable(${PROJECT_NAME}_tests
+        tests/i18n/i18n_test.cpp
+        ${I18N_SOURCES}
+        ${I18N_HEADERS}
+    )
+
+    target_include_directories(${PROJECT_NAME}_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+
+    target_link_libraries(${PROJECT_NAME}_tests PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        fmt::fmt
+        spdlog::spdlog
+        nlohmann_json::nlohmann_json
+    )
+
+    # Copy language files to test build directory
+    add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/lang
+            $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>/lang
+        COMMENT "Copying language files for tests"
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(${PROJECT_NAME}_tests)
+endif()
+
 # =============================================================================
 # Configuration Summary
 # =============================================================================
@@ -366,6 +424,7 @@ message(STATUS "OpenCV: ${OpenCV_VERSION}")
 message(STATUS "")
 message(STATUS "Features:")
 message(STATUS "  BUILD_GUI: ${BUILD_GUI}")
+message(STATUS "  BUILD_TESTS: ${BUILD_TESTS}")
 message(STATUS "  OPENGL_FOUND: ${OPENGL_FOUND}")
 message(STATUS "  OPENGL_opengl_LIBRARY: ${OPENGL_opengl_LIBRARY}")
 message(STATUS "  OPENGL_glx_LIBRARY: ${OPENGL_glx_LIBRARY}")

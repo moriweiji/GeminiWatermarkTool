@@ -17,6 +17,8 @@
 #include "utils/ascii_logo.hpp"
 #include "utils/path_formatter.hpp"
 #include "embedded_assets.hpp"
+#include "i18n/i18n.hpp"
+#include "i18n/keys.hpp"
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -48,6 +50,50 @@ namespace gwt::cli {
 namespace {
 
 // =============================================================================
+// i18n Initialization
+// =============================================================================
+
+// Find language directory relative to executable
+fs::path find_lang_dir() {
+    // 1. Check executable directory
+    auto exe_dir = fs::current_path();
+    if (fs::exists(exe_dir / "lang" / "en.json")) {
+        return exe_dir / "lang";
+    }
+
+    // 2. Check resources directory (development)
+    if (fs::exists("resources/lang/en.json")) {
+        return "resources/lang";
+    }
+
+    // 3. Check parent directory (some build configurations)
+    if (fs::exists(exe_dir.parent_path() / "lang" / "en.json")) {
+        return exe_dir.parent_path() / "lang";
+    }
+
+#ifdef __linux__
+    // 4. Check system install location (Linux)
+    if (fs::exists("/usr/share/gemini-watermark-tool/lang/en.json")) {
+        return "/usr/share/gemini-watermark-tool/lang";
+    }
+#endif
+
+    // Fallback
+    return "lang";
+}
+
+// Initialize i18n (called once at startup)
+bool g_i18n_initialized = false;
+
+void ensure_i18n_initialized() {
+    if (!g_i18n_initialized) {
+        auto lang_dir = find_lang_dir();
+        i18n::init(lang_dir, i18n::Language::English);  // CLI defaults to English
+        g_i18n_initialized = true;
+    }
+}
+
+// =============================================================================
 // TTY Detection
 // =============================================================================
 
@@ -65,7 +111,7 @@ bool is_terminal() noexcept {
 
 [[maybe_unused]] void print_logo() {
     fmt::print(fmt::fg(fmt::color::cyan), "{}", gwt::ASCII_COMPACT);
-    fmt::print(fmt::fg(fmt::color::yellow), "  [Standalone Edition]");
+    fmt::print(fmt::fg(fmt::color::yellow), "  {}", TR(i18n::keys::CLI_STANDALONE));
     fmt::print(fmt::fg(fmt::color::gray), "  v{}\n", APP_VERSION);
     fmt::print("\n");
 }
@@ -90,15 +136,15 @@ struct BatchResult {
         int total = success + skipped + failed;
         if (total > 1) {
             fmt::print("\n");
-            fmt::print(fmt::fg(fmt::color::green), "[Summary] ");
-            fmt::print("Processed: {}", success);
+            fmt::print(fmt::fg(fmt::color::green), "{}", TR(i18n::keys::CLI_SUMMARY));
+            fmt::print("{}", TRF(i18n::keys::CLI_PROCESSED, success));
             if (skipped > 0) {
-                fmt::print(fmt::fg(fmt::color::yellow), ", Skipped: {}", skipped);
+                fmt::print(fmt::fg(fmt::color::yellow), "{}", TRF(i18n::keys::CLI_SKIPPED, skipped));
             }
             if (failed > 0) {
-                fmt::print(fmt::fg(fmt::color::red), ", Failed: {}", failed);
+                fmt::print(fmt::fg(fmt::color::red), "{}", TRF(i18n::keys::CLI_FAILED, failed));
             }
-            fmt::print(" (Total: {})\n", total);
+            fmt::print("{}\n", TRF(i18n::keys::CLI_TOTAL, total));
         }
     }
 };
@@ -118,20 +164,20 @@ void process_single(
 
     if (proc_result.skipped) {
         result.skipped++;
-        fmt::print(fmt::fg(fmt::color::yellow), "[SKIP] ");
+        fmt::print(fmt::fg(fmt::color::yellow), "{}", TR(i18n::keys::CLI_SKIP));
         fmt::print("{}: {}\n", gwt::filename_utf8(input), proc_result.message);
     } else if (proc_result.success) {
         result.success++;
-        fmt::print(fmt::fg(fmt::color::green), "[OK] ");
+        fmt::print(fmt::fg(fmt::color::green), "{}", TR(i18n::keys::CLI_OK));
         fmt::print("{}", gwt::filename_utf8(input));
         if (proc_result.confidence > 0) {
-            fmt::print(fmt::fg(fmt::color::gray), " ({:.0f}% confidence)",
-                       proc_result.confidence * 100.0f);
+            fmt::print(fmt::fg(fmt::color::gray), " {}",
+                       TRF(i18n::keys::CLI_CONFIDENCE, static_cast<int>(proc_result.confidence * 100.0f)));
         }
         fmt::print("\n");
     } else {
         result.failed++;
-        fmt::print(fmt::fg(fmt::color::red), "[FAIL] ");
+        fmt::print(fmt::fg(fmt::color::red), "{}", TR(i18n::keys::CLI_FAIL));
         fmt::print("{}: {}\n", gwt::filename_utf8(input), proc_result.message);
     }
 }
@@ -183,6 +229,9 @@ bool is_simple_mode(int argc, char** argv) {
 }
 
 int run_simple_mode(int argc, char** argv) {
+    // Initialize i18n
+    ensure_i18n_initialized();
+
     // Check banner preference
     auto banner_flag = parse_banner_flag(argc, argv);
     if (should_show_banner(banner_flag)) {
@@ -200,8 +249,8 @@ int run_simple_mode(int argc, char** argv) {
     constexpr float detection_threshold = 0.25f;
 
     fmt::print(fmt::fg(fmt::color::gray),
-               "Auto-detection enabled (threshold: {:.0f}%)\n\n",
-               detection_threshold * 100.0f);
+               "{}\n\n",
+               TRF(i18n::keys::CLI_AUTO_DETECTION, static_cast<int>(detection_threshold * 100.0f)));
 
     try {
         WatermarkEngine engine(
@@ -220,18 +269,18 @@ int run_simple_mode(int argc, char** argv) {
             fs::path input(arg);
 
             if (!fs::exists(input)) {
-                fmt::print(fmt::fg(fmt::color::red), "[ERROR] ");
-                fmt::print("File not found: {}\n", gwt::to_utf8(input));
+                fmt::print(fmt::fg(fmt::color::red), "{}", TR(i18n::keys::CLI_ERROR));
+                fmt::print("{}\n", TRF(i18n::keys::CLI_FILE_NOT_FOUND, gwt::to_utf8(input)));
                 fmt::print(fmt::fg(fmt::color::gray),
-                           "  (Path may contain encoding issues on Windows without UTF-8 beta)\n");
+                           "  {}\n", TR(i18n::keys::CLI_PATH_HINT));
                 result.failed++;
                 continue;
             }
 
             if (fs::is_directory(input)) {
-                fmt::print(fmt::fg(fmt::color::red), "[ERROR] ");
-                fmt::print("Directory not supported in simple mode: {}\n", gwt::to_utf8(input));
-                fmt::print("  Use: gwt -i <dir> -o <dir>\n");
+                fmt::print(fmt::fg(fmt::color::red), "{}", TR(i18n::keys::CLI_ERROR));
+                fmt::print("{}\n", TRF(i18n::keys::CLI_DIR_NOT_SUPPORTED, gwt::to_utf8(input)));
+                fmt::print("  {}\n", TR(i18n::keys::CLI_USE_DIR_HINT));
                 result.failed++;
                 continue;
             }
@@ -243,12 +292,15 @@ int run_simple_mode(int argc, char** argv) {
         result.print();
         return (result.failed > 0) ? 1 : 0;
     } catch (const std::exception& e) {
-        fmt::print(fmt::fg(fmt::color::red), "[FATAL] {}\n", e.what());
+        fmt::print(fmt::fg(fmt::color::red), "{}{}\n", TR(i18n::keys::CLI_FATAL), e.what());
         return 1;
     }
 }
 
 int run(int argc, char** argv) {
+    // Initialize i18n
+    ensure_i18n_initialized();
+
     // Check for simple mode first
     if (is_simple_mode(argc, argv)) {
         return run_simple_mode(argc, argv);
@@ -337,24 +389,24 @@ int run(int argc, char** argv) {
     // Determine force size option
     std::optional<WatermarkSize> force_size;
     if (force_small && force_large) {
-        spdlog::error("Cannot specify both --force-small and --force-large");
+        spdlog::error("{}", TR(i18n::keys::CLI_BOTH_SIZE_ERROR));
         return 1;
     } else if (force_small) {
         force_size = WatermarkSize::Small;
-        spdlog::info("Forcing 48x48 watermark size");
+        spdlog::info("{}", TR(i18n::keys::CLI_FORCING_SMALL));
     } else if (force_large) {
         force_size = WatermarkSize::Large;
-        spdlog::info("Forcing 96x96 watermark size");
+        spdlog::info("{}", TR(i18n::keys::CLI_FORCING_LARGE));
     }
 
     // Print detection status
     if (use_detection) {
         fmt::print(fmt::fg(fmt::color::gray),
-                   "Auto-detection enabled (threshold: {:.0f}%)\n\n",
-                   detection_threshold * 100.0f);
+                   "{}\n\n",
+                   TRF(i18n::keys::CLI_AUTO_DETECTION, static_cast<int>(detection_threshold * 100.0f)));
     } else {
         fmt::print(fmt::fg(fmt::color::yellow),
-                   "WARNING: Force mode - processing ALL images without detection!\n\n");
+                   "{}\n\n", TR(i18n::keys::CLI_FORCE_WARNING));
     }
 
     try {
@@ -368,12 +420,12 @@ int run(int argc, char** argv) {
 
         // Manual existence check with better error messages for CJK paths
         if (!fs::exists(input)) {
-            fmt::print(fmt::fg(fmt::color::red), "[ERROR] ");
-            fmt::print("Input path not found: {}\n", gwt::to_utf8(input));
+            fmt::print(fmt::fg(fmt::color::red), "{}", TR(i18n::keys::CLI_ERROR));
+            fmt::print("{}\n", TRF(i18n::keys::CLI_INPUT_NOT_FOUND, gwt::to_utf8(input)));
             fmt::print(fmt::fg(fmt::color::gray),
-                       "  (If the path contains CJK characters, try enabling Windows UTF-8 beta\n");
+                       "  {}\n", TR(i18n::keys::CLI_CJK_HINT));
             fmt::print(fmt::fg(fmt::color::gray),
-                       "   or use the GUI version which handles Unicode paths correctly)\n");
+                       "   {}\n", TR(i18n::keys::CLI_GUI_HINT));
             return 1;
         }
 

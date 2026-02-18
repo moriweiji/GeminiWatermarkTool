@@ -7,8 +7,11 @@
 
 #include "gui/widgets/image_preview.hpp"
 #include "gui/resources/style.hpp"
+#include "i18n/i18n.hpp"
+#include "i18n/keys.hpp"
 
 #include <imgui.h>
+#include <fmt/format.h>
 #include <algorithm>
 #include <cmath>
 
@@ -45,7 +48,7 @@ void ImagePreview::render_placeholder() {
     ImVec2 content_start = ImGui::GetCursorScreenPos();
 
     // Draw placeholder text centered
-    const char* text = "Drop an image here or click Open";
+    const char* text = TR(i18n::keys::PREVIEW_PLACEHOLDER);
     ImVec2 text_size = ImGui::CalcTextSize(text);
 
     ImVec2 text_pos(
@@ -202,8 +205,9 @@ void ImagePreview::render_batch_view() {
             if (batch.files.size() > static_cast<size_t>(kThumbnailMaxCount)) {
                 ImGui::Spacing();
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-                                  "[+%zu more files...]",
-                                  batch.files.size() - kThumbnailMaxCount);
+                                  "%s",
+                                  TRF(i18n::keys::PREVIEW_MORE_FILES,
+                                      batch.files.size() - kThumbnailMaxCount).c_str());
             }
         }
     }
@@ -230,7 +234,7 @@ void ImagePreview::render_batch_view() {
     if (batch.in_progress || batch.is_complete()) {
         ImGui::Separator();
         ImGui::Spacing();
-        ImGui::Text("Results");
+        ImGui::Text("%s", TR(i18n::keys::PREVIEW_RESULTS));
 
         float list_height = std::max(100.0f, avail.y * 0.3f);
         ImGui::BeginChild("BatchResults", ImVec2(-1, list_height), true);
@@ -244,15 +248,15 @@ void ImagePreview::render_batch_view() {
             switch (f.status) {
                 case BatchFileStatus::OK:
                     color = ImVec4(0.3f, 0.8f, 0.3f, 1.0f);
-                    tag = "[OK]";
+                    tag = TR(i18n::keys::CLI_OK);
                     break;
                 case BatchFileStatus::Skipped:
                     color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-                    tag = "[SKIP]";
+                    tag = TR(i18n::keys::CLI_SKIP);
                     break;
                 case BatchFileStatus::Failed:
                     color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-                    tag = "[FAIL]";
+                    tag = TR(i18n::keys::CLI_FAIL);
                     break;
                 default:
                     color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
@@ -280,9 +284,10 @@ void ImagePreview::render_batch_view() {
     if (batch.is_complete()) {
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f),
-                          "Complete: %zu OK, %zu skipped, %zu failed (total: %zu)",
-                          batch.success_count, batch.skip_count,
-                          batch.fail_count, batch.total());
+                          "%s",
+                          TRF(i18n::keys::PREVIEW_COMPLETE,
+                              batch.success_count, batch.skip_count,
+                              batch.fail_count, batch.total()).c_str());
     }
 
     // Auto-scroll to progress area when batch starts
@@ -508,7 +513,9 @@ void ImagePreview::render_image() {
 
             draw_list->AddRect(wm_tl, wm_br, color, 0, 0, 2.0f);
 
-            const char* label = opts.show_processed ? "Removed" : "Watermark";
+            const char* label = opts.show_processed
+                ? TR(i18n::keys::PREVIEW_REMOVED)
+                : TR(i18n::keys::PREVIEW_WATERMARK);
             draw_outlined_text(draw_list,
                 ImVec2(wm_tl.x, wm_tl.y - ImGui::GetTextLineHeight() - 2),
                 color, label);
@@ -528,10 +535,11 @@ void ImagePreview::render_image() {
 
     // Draw info overlay on top (always visible, not affected by "C" key)
     ImGui::SetCursorScreenPos(ImVec2(viewport_start.x + 5, viewport_start.y + 5));
-    ImGui::Text("%.0f%% | %s%s",
+    std::string info_text = fmt::format("{:.0f}% | {}{}",
                 opts.zoom * 100.0f,
-                opts.show_processed ? "Processed" : "Original",
-                hide_overlays ? " | [C] Overlay Hidden" : "");
+                opts.show_processed ? TR(i18n::keys::STATUS_PROCESSED) : TR(i18n::keys::STATUS_ORIGINAL),
+                hide_overlays ? std::string(" | ") + TR(i18n::keys::PREVIEW_OVERLAY_HIDDEN) : "");
+    ImGui::Text("%s", info_text.c_str());
 }
 
 // =============================================================================
@@ -571,7 +579,7 @@ void ImagePreview::draw_custom_rect_with_anchors(ImDrawList* draw_list) {
     draw_list->AddRect(tl, br, rect_color, 0, 0, 2.0f);
 
     // Label
-    const char* label = "Custom Watermark";
+    const char* label = TR(i18n::keys::PREVIEW_CUSTOM);
     draw_outlined_text(draw_list,
         ImVec2(tl.x, tl.y - ImGui::GetTextLineHeight() - 2),
         rect_color, label);

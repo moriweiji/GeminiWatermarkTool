@@ -7,6 +7,8 @@
 
 #include "gui/widgets/main_window.hpp"
 #include "utils/path_formatter.hpp"
+#include "i18n/i18n.hpp"
+#include "i18n/keys.hpp"
 
 #include <imgui.h>
 #include <implot.h>
@@ -419,23 +421,23 @@ bool MainWindow::handle_event(const SDL_Event& event) {
 
 void MainWindow::render_menu_bar() {
     if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Open...", "Ctrl+O")) {
+        if (ImGui::BeginMenu(TR(i18n::keys::MENU_FILE))) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_FILE_OPEN), "Ctrl+O")) {
                 action_open_file();
             }
-            if (ImGui::MenuItem("Save", "Ctrl+S", false, m_controller.state().can_save())) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_FILE_SAVE), "Ctrl+S", false, m_controller.state().can_save())) {
                 action_save_file();
             }
-            if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, m_controller.state().can_save())) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_FILE_SAVE_AS), "Ctrl+Shift+S", false, m_controller.state().can_save())) {
                 action_save_file_as();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Close", "Ctrl+W", false,
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_FILE_CLOSE), "Ctrl+W", false,
                                 m_controller.state().image.has_image() || m_controller.state().batch.is_batch_mode())) {
                 action_close_file();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Exit", "Alt+F4")) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_FILE_EXIT), "Alt+F4")) {
                 // Request quit
                 SDL_Event quit_event = {};
                 quit_event.type = SDL_EVENT_QUIT;
@@ -444,38 +446,38 @@ void MainWindow::render_menu_bar() {
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Process", "X", false, m_controller.state().can_process())) {
+        if (ImGui::BeginMenu(TR(i18n::keys::MENU_EDIT))) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_EDIT_PROCESS), "X", false, m_controller.state().can_process())) {
                 action_process();
             }
-            if (ImGui::MenuItem("Revert", "Z", false, m_controller.state().image.has_processed())) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_EDIT_REVERT), "Z", false, m_controller.state().image.has_processed())) {
                 action_revert();
             }
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("Compare Original", "V", false, m_controller.state().image.has_processed())) {
+        if (ImGui::BeginMenu(TR(i18n::keys::MENU_VIEW))) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_VIEW_COMPARE), "V", false, m_controller.state().image.has_processed())) {
                 action_toggle_preview();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Zoom In", "Ctrl++")) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_VIEW_ZOOM_IN), "Ctrl++")) {
                 action_zoom_in();
             }
-            if (ImGui::MenuItem("Zoom Out", "Ctrl+-")) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_VIEW_ZOOM_OUT), "Ctrl+-")) {
                 action_zoom_out();
             }
-            if (ImGui::MenuItem("Fit to Window", "Ctrl+0")) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_VIEW_FIT), "Ctrl+0")) {
                 action_zoom_fit();
             }
-            if (ImGui::MenuItem("100%", "Ctrl+1")) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_VIEW_100), "Ctrl+1")) {
                 action_zoom_100();
             }
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItem("Online Documentation")) {
+        if (ImGui::BeginMenu(TR(i18n::keys::MENU_HELP))) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_HELP_DOCS))) {
                 // Open Medium article in default browser
                 constexpr const char* url =
                     "https://allenkuo.medium.com/removing-gemini-ai-watermarks-"
@@ -490,8 +492,25 @@ void MainWindow::render_menu_bar() {
                 #endif
                 [[maybe_unused]] int ret = system(cmd.c_str());
             }
+
+            // Language submenu
+            if (ImGui::BeginMenu(TR(i18n::keys::MENU_HELP_LANGUAGE))) {
+                auto current = i18n::current_language();
+                auto languages = i18n::available_languages();
+
+                for (const auto& [lang, name] : languages) {
+                    bool is_current = (lang == current);
+                    if (ImGui::MenuItem(name.c_str(), nullptr, is_current)) {
+                        if (!is_current) {
+                            i18n::set_language(lang);
+                        }
+                    }
+                }
+                ImGui::EndMenu();
+            }
+
             ImGui::Separator();
-            if (ImGui::MenuItem("About")) {
+            if (ImGui::MenuItem(TR(i18n::keys::MENU_HELP_ABOUT))) {
                 m_controller.state().show_about_dialog = true;
             }
             ImGui::EndMenu();
@@ -507,27 +526,27 @@ void MainWindow::render_toolbar() {
 
     ImGui::Separator();
 
-    if (ImGui::Button("Open")) {
+    if (ImGui::Button(TR(i18n::keys::TOOLBAR_OPEN))) {
         action_open_file();
     }
     ImGui::SameLine();
 
     ImGui::BeginDisabled(!m_controller.state().can_save());
-    if (ImGui::Button("Save")) {
+    if (ImGui::Button(TR(i18n::keys::TOOLBAR_SAVE))) {
         action_save_file();
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
 
     ImGui::BeginDisabled(!m_controller.state().can_process());
-    if (ImGui::Button("Process")) {
+    if (ImGui::Button(TR(i18n::keys::TOOLBAR_PROCESS))) {
         action_process();
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
 
     ImGui::BeginDisabled(!m_controller.state().image.has_processed());
-    if (ImGui::Button("Compare")) {
+    if (ImGui::Button(TR(i18n::keys::TOOLBAR_COMPARE))) {
         action_toggle_preview();
     }
     ImGui::EndDisabled();
@@ -539,38 +558,38 @@ void MainWindow::render_toolbar() {
 void MainWindow::render_control_panel() {
     auto& state = m_controller.state();
 
-    ImGui::Text("Operation");
+    ImGui::Text("%s", TR(i18n::keys::PANEL_OPERATION));
     ImGui::Separator();
 
     // Mode selection
     bool remove_mode = state.process_options.remove_mode;
-    if (ImGui::RadioButton("Remove Watermark", remove_mode)) {
+    if (ImGui::RadioButton(TR(i18n::keys::PANEL_OP_REMOVE), remove_mode)) {
         m_controller.set_remove_mode(true);
     }
-    if (ImGui::RadioButton("Add Watermark", !remove_mode)) {
+    if (ImGui::RadioButton(TR(i18n::keys::PANEL_OP_ADD), !remove_mode)) {
         m_controller.set_remove_mode(false);
     }
 
     ImGui::Spacing();
-    ImGui::Text("Watermark Size");
+    ImGui::Text("%s", TR(i18n::keys::PANEL_SIZE));
     ImGui::Separator();
 
     // Size selection using WatermarkSizeMode
     auto& opts = state.process_options;
     int size_option = static_cast<int>(opts.size_mode);
 
-    if (ImGui::RadioButton("Auto Detect", size_option == 0)) {
+    if (ImGui::RadioButton(TR(i18n::keys::PANEL_SIZE_AUTO), size_option == 0)) {
         m_controller.set_size_mode(WatermarkSizeMode::Auto);
     }
-    if (ImGui::RadioButton("48x48 (Small)", size_option == 1)) {
+    if (ImGui::RadioButton(TR(i18n::keys::PANEL_SIZE_SMALL), size_option == 1)) {
         m_controller.set_size_mode(WatermarkSizeMode::Small);
     }
-    if (ImGui::RadioButton("96x96 (Large)", size_option == 2)) {
+    if (ImGui::RadioButton(TR(i18n::keys::PANEL_SIZE_LARGE), size_option == 2)) {
         m_controller.set_size_mode(WatermarkSizeMode::Large);
     }
     // Custom mode is not available in batch mode
     if (!state.batch.is_batch_mode()) {
-        if (ImGui::RadioButton("Custom", size_option == 3)) {
+        if (ImGui::RadioButton(TR(i18n::keys::PANEL_SIZE_CUSTOM), size_option == 3)) {
             m_controller.set_size_mode(WatermarkSizeMode::Custom);
         }
     }
@@ -582,12 +601,12 @@ void MainWindow::render_control_panel() {
 
         if (state.custom_watermark.has_region) {
             // Re-detect button
-            if (ImGui::SmallButton("Re-detect")) {
+            if (ImGui::SmallButton(TR(i18n::keys::PANEL_REDETECT))) {
                 state.custom_watermark.detection_attempted = false;
                 m_controller.detect_custom_watermark();
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset")) {
+            if (ImGui::SmallButton(TR(i18n::keys::PANEL_RESET))) {
                 state.custom_watermark.clear();
                 m_controller.detect_custom_watermark();
             }
@@ -596,15 +615,14 @@ void MainWindow::render_control_panel() {
             if (state.custom_watermark.detection_confidence > 0.0f) {
                 ImGui::TextColored(
                     ImVec4(0.3f, 0.8f, 0.3f, 1.0f),
-                    "Confidence: %.0f%%",
-                    state.custom_watermark.detection_confidence * 100.0f);
+                    TRF(i18n::keys::PANEL_CONFIDENCE, state.custom_watermark.detection_confidence * 100.0f).c_str());
             } else {
                 ImGui::TextColored(
                     ImVec4(0.8f, 0.6f, 0.2f, 1.0f),
-                    "Fallback position");
+                    "%s", TR(i18n::keys::PANEL_FALLBACK));
             }
         } else {
-            ImGui::TextWrapped("Draw a rectangle on the preview to mark the watermark region.");
+            ImGui::TextWrapped("%s", TR(i18n::keys::PANEL_DRAW_HINT));
         }
 
         ImGui::Unindent();
@@ -613,16 +631,16 @@ void MainWindow::render_control_panel() {
     // Show detected info
     if (state.watermark_info && state.image.has_image() && !state.batch.is_batch_mode()) {
         ImGui::Spacing();
-        ImGui::Text("Detected Info");
+        ImGui::Text("%s", TR(i18n::keys::PANEL_DETECTED));
         ImGui::Separator();
 
         const auto& info = *state.watermark_info;
-        ImGui::Text("Size: %dx%d", info.width(), info.height());
-        ImGui::Text("Position:");
+        ImGui::Text("%s %dx%d", TR(i18n::keys::PANEL_INFO_SIZE), info.width(), info.height());
+        ImGui::Text("%s", TR(i18n::keys::PANEL_INFO_POS));
         ImGui::Text("  (%d, %d)", info.position.x, info.position.y);
 
         if (info.is_custom) {
-            ImGui::Text("Region:");
+            ImGui::Text("%s", TR(i18n::keys::PANEL_INFO_REGION));
             ImGui::Text("  (%d,%d)-(%d,%d)",
                        info.region.x, info.region.y,
                        info.region.x + info.region.width,
@@ -633,11 +651,11 @@ void MainWindow::render_control_panel() {
     // Detection threshold (always visible for batch, optional for single)
     if (state.batch.is_batch_mode()) {
         ImGui::Spacing();
-        ImGui::Text("Detection");
+        ImGui::Text("%s", TR(i18n::keys::PANEL_DETECTION));
         ImGui::Separator();
 
         bool use_det = state.batch.use_detection;
-        if (ImGui::Checkbox("Auto-detect watermark", &use_det)) {
+        if (ImGui::Checkbox(TR(i18n::keys::PANEL_AUTO_DETECT), &use_det)) {
             state.batch.use_detection = use_det;
         }
 
@@ -648,37 +666,38 @@ void MainWindow::render_control_panel() {
             threshold_pct = ((threshold_pct + 2) / 5) * 5;
 
             ImGui::SetNextItemWidth(-1);
-            if (ImGui::SliderInt("##threshold", &threshold_pct, 0, 100, "Threshold: %d%%")) {
+            if (ImGui::SliderInt("##threshold", &threshold_pct, 0, 100,
+                                 TRF(i18n::keys::PANEL_THRESHOLD_FMT, threshold_pct).c_str())) {
                 // Snap to 5% steps
                 threshold_pct = ((threshold_pct + 2) / 5) * 5;
                 state.batch.detection_threshold = static_cast<float>(threshold_pct) / 100.0f;
             }
             if (threshold_pct > 0) {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-                                  "Skip images below %d%%", threshold_pct);
+                                  "%s", TRF(i18n::keys::PANEL_SKIP_BELOW, threshold_pct).c_str());
             } else {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-                                  "Process all images");
+                                  "%s", TR(i18n::keys::PANEL_PROCESS_ALL));
             }
             ImGui::TextColored(ImVec4(0.4f, 0.6f, 0.4f, 1.0f),
-                              "(25%% recommended)");
+                              "%s", TR(i18n::keys::PANEL_RECOMMENDED));
         }
     }
 
     // Preview options (only in single-image mode)
     if (!state.batch.is_batch_mode()) {
         ImGui::Spacing();
-        ImGui::Text("Preview");
+        ImGui::Text("%s", TR(i18n::keys::PANEL_PREVIEW));
         ImGui::Separator();
 
         bool highlight = state.preview_options.highlight_watermark;
-        if (ImGui::Checkbox("Highlight Watermark", &highlight)) {
+        if (ImGui::Checkbox(TR(i18n::keys::PANEL_HIGHLIGHT), &highlight)) {
             state.preview_options.highlight_watermark = highlight;
         }
 
         bool show_processed = state.preview_options.show_processed;
         ImGui::BeginDisabled(!state.image.has_processed());
-        if (ImGui::Checkbox("Show Processed", &show_processed)) {
+        if (ImGui::Checkbox(TR(i18n::keys::PANEL_SHOW_PROCESSED), &show_processed)) {
             state.preview_options.show_processed = show_processed;
             m_controller.invalidate_texture();
         }
@@ -686,10 +705,10 @@ void MainWindow::render_control_panel() {
 
         // Zoom
         ImGui::Spacing();
-        ImGui::Text("Zoom: %.0f%%", state.preview_options.zoom * 100);
-        if (ImGui::Button("Fit")) action_zoom_fit();
+        ImGui::Text("%s", TRF(i18n::keys::PANEL_ZOOM_FMT, state.preview_options.zoom * 100).c_str());
+        if (ImGui::Button(TR(i18n::keys::PANEL_ZOOM_FIT))) action_zoom_fit();
         ImGui::SameLine();
-        if (ImGui::Button("100%")) action_zoom_100();
+        if (ImGui::Button(TR(i18n::keys::PANEL_ZOOM_100))) action_zoom_100();
         ImGui::SameLine();
         if (ImGui::Button("+")) action_zoom_in();
         ImGui::SameLine();
@@ -699,22 +718,22 @@ void MainWindow::render_control_panel() {
     // Batch info
     if (state.batch.is_batch_mode()) {
         ImGui::Spacing();
-        ImGui::Text("Batch");
+        ImGui::Text("%s", TR(i18n::keys::PANEL_BATCH));
         ImGui::Separator();
 
-        ImGui::Text("Files: %zu", state.batch.total());
+        ImGui::Text("%s", TRF(i18n::keys::PANEL_BATCH_FILES, state.batch.total()).c_str());
 
         if (state.batch.is_complete()) {
             ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f),
-                              "OK: %zu  Skipped: %zu  Failed: %zu",
-                              state.batch.success_count,
-                              state.batch.skip_count,
-                              state.batch.fail_count);
+                              "%s", TRF(i18n::keys::PANEL_BATCH_RESULT,
+                                       state.batch.success_count,
+                                       state.batch.skip_count,
+                                       state.batch.fail_count).c_str());
         }
 
         // Exit batch mode button
         if (!state.batch.in_progress) {
-            if (ImGui::SmallButton("Exit Batch Mode")) {
+            if (ImGui::SmallButton(TR(i18n::keys::PANEL_EXIT_BATCH))) {
                 m_controller.exit_batch_mode();
             }
         }
@@ -729,12 +748,12 @@ void MainWindow::render_control_panel() {
 
     if (state.batch.in_progress) {
         // Cancel button during batch processing
-        if (ImGui::Button("Cancel Batch", button_size)) {
+        if (ImGui::Button(TR(i18n::keys::PANEL_CANCEL_BATCH), button_size)) {
             m_controller.cancel_batch();
         }
     } else {
         const char* button_label = state.batch.is_batch_mode()
-            ? "Process Batch" : "Process Image";
+            ? TR(i18n::keys::PANEL_PROCESS_BATCH) : TR(i18n::keys::PANEL_PROCESS_IMAGE);
         ImGui::BeginDisabled(!state.can_process());
         if (ImGui::Button(button_label, button_size)) {
             action_process();
@@ -747,7 +766,7 @@ void MainWindow::render_control_panel() {
     ImGui::Spacing();
     ImGui::Separator();
 
-    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Shortcuts");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", TR(i18n::keys::PANEL_SHORTCUTS));
 
     if (ImGui::BeginTable("shortcuts", 2)) {
         ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 90.0f);
@@ -761,16 +780,16 @@ void MainWindow::render_control_panel() {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", desc);
             };
 
-        row("X", "Process image");
-        row("V", "Compare original");
-        row("Z", "Revert to original");
-        row("C (hold)", "Hide overlay");
-        row("W A S D", "Move selected region");
-        row("Space", "Pan (hold + drag)");
-        row("Alt", "Pan (hold + drag)");
-        row("Ctrl +/-", "Zoom in/out");
-        row("Ctrl 0", "Zoom fit");
-        row("Scroll", "Zoom to cursor");
+        row("X", TR(i18n::keys::SHORTCUT_PROCESS));
+        row("V", TR(i18n::keys::SHORTCUT_COMPARE));
+        row("Z", TR(i18n::keys::SHORTCUT_REVERT));
+        row("C (hold)", TR(i18n::keys::SHORTCUT_HIDE_OVERLAY));
+        row("W A S D", TR(i18n::keys::SHORTCUT_MOVE_REGION));
+        row("Space", TR(i18n::keys::SHORTCUT_PAN));
+        row("Alt", TR(i18n::keys::SHORTCUT_PAN));
+        row("Ctrl +/-", TR(i18n::keys::SHORTCUT_ZOOM));
+        row("Ctrl 0", TR(i18n::keys::SHORTCUT_ZOOM_FIT));
+        row("Scroll", TR(i18n::keys::SHORTCUT_ZOOM_CURSOR));
 
         ImGui::EndTable();
     }
@@ -818,7 +837,9 @@ void MainWindow::render_status_bar() {
         std::string info = fmt::format("{}x{} | {}",
                                         state.image.width,
                                         state.image.height,
-                                        state.preview_options.show_processed ? "Processed" : "Original");
+                                        state.preview_options.show_processed
+                                            ? TR(i18n::keys::STATUS_PROCESSED)
+                                            : TR(i18n::keys::STATUS_ORIGINAL));
 
         float text_width = ImGui::CalcTextSize(info.c_str()).x;
         ImGui::SameLine(ImGui::GetWindowWidth() - text_width - 10.0f * scale);
@@ -829,25 +850,25 @@ void MainWindow::render_status_bar() {
 }
 
 void MainWindow::render_about_dialog() {
-    ImGui::OpenPopup("About");
+    ImGui::OpenPopup(TR(i18n::keys::DIALOG_ABOUT_TITLE));
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (ImGui::BeginPopupModal("About", &m_controller.state().show_about_dialog,
+    if (ImGui::BeginPopupModal(TR(i18n::keys::DIALOG_ABOUT_TITLE), &m_controller.state().show_about_dialog,
                                 ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Gemini Watermark Tool");
-        ImGui::Text("Version %s", APP_VERSION);
+        ImGui::Text("%s", TR(i18n::keys::DIALOG_ABOUT_NAME));
+        ImGui::Text("%s", TRF(i18n::keys::DIALOG_ABOUT_VERSION, APP_VERSION).c_str());
         ImGui::Separator();
-        ImGui::Text("A tool to add/remove Gemini-style visible watermarks");
-        ImGui::Text("using reverse alpha blending.");
+        ImGui::Text("%s", TR(i18n::keys::DIALOG_ABOUT_DESC));
+        ImGui::Text("%s", TR(i18n::keys::DIALOG_ABOUT_DESC2));
         ImGui::Spacing();
-        ImGui::Text("Author: Allen Kuo (@allenk)");
-        ImGui::Text("License: MIT");
+        ImGui::Text("%s", TR(i18n::keys::DIALOG_ABOUT_AUTHOR));
+        ImGui::Text("%s", TR(i18n::keys::DIALOG_ABOUT_LICENSE));
         ImGui::Spacing();
 
         float ok_width = 120.0f * m_controller.state().dpi_scale;
-        if (ImGui::Button("OK", ImVec2(ok_width, 0))) {
+        if (ImGui::Button(TR(i18n::keys::DIALOG_OK), ImVec2(ok_width, 0))) {
             m_controller.state().show_about_dialog = false;
             ImGui::CloseCurrentPopup();
         }
@@ -858,42 +879,45 @@ void MainWindow::render_about_dialog() {
 void MainWindow::render_batch_confirm_dialog() {
     auto& state = m_controller.state();
 
-    ImGui::OpenPopup("Batch Processing");
+    ImGui::OpenPopup(TR(i18n::keys::DIALOG_BATCH_TITLE));
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (ImGui::BeginPopupModal("Batch Processing", &state.batch.show_confirm_dialog,
+    if (ImGui::BeginPopupModal(TR(i18n::keys::DIALOG_BATCH_TITLE), &state.batch.show_confirm_dialog,
                                 ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Warning: Original files will be overwritten!");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", TR(i18n::keys::DIALOG_BATCH_WARNING));
         ImGui::Spacing();
 
-        ImGui::Text("Files to process: %zu", state.batch.total());
-        ImGui::Text("Mode: %s", state.process_options.remove_mode ? "Remove Watermark" : "Add Watermark");
+        ImGui::Text("%s", TRF(i18n::keys::DIALOG_BATCH_FILES, state.batch.total()).c_str());
+        ImGui::Text("%s", TRF(i18n::keys::DIALOG_BATCH_MODE,
+                             state.process_options.remove_mode
+                                 ? TR(i18n::keys::PANEL_OP_REMOVE)
+                                 : TR(i18n::keys::PANEL_OP_ADD)).c_str());
 
         // Size mode
-        const char* size_label = "Auto";
+        const char* size_label = TR(i18n::keys::PANEL_SIZE_AUTO);
         switch (state.process_options.size_mode) {
             case WatermarkSizeMode::Small:  size_label = "48x48"; break;
             case WatermarkSizeMode::Large:  size_label = "96x96"; break;
-            case WatermarkSizeMode::Custom: size_label = "Custom (auto-detect per image)"; break;
+            case WatermarkSizeMode::Custom: size_label = TR(i18n::keys::DIALOG_BATCH_CUSTOM_AUTO); break;
             default: break;
         }
-        ImGui::Text("Size: %s", size_label);
+        ImGui::Text("%s", TRF(i18n::keys::DIALOG_BATCH_SIZE, size_label).c_str());
 
         if (state.batch.use_detection) {
             int threshold_pct = static_cast<int>(state.batch.detection_threshold * 100.0f + 0.5f);
-            ImGui::Text("Detection threshold: %d%%", threshold_pct);
+            ImGui::Text("%s", TRF(i18n::keys::DIALOG_BATCH_THRESHOLD, threshold_pct).c_str());
             if (threshold_pct > 0) {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-                                  "Images below %d%% confidence will be skipped.", threshold_pct);
+                                  "%s", TRF(i18n::keys::DIALOG_BATCH_SKIP_INFO, threshold_pct).c_str());
             } else {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-                                  "All images will be processed (threshold = 0%%).");
+                                  "%s", TR(i18n::keys::DIALOG_BATCH_PROCESS_ALL));
             }
         } else {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f),
-                              "Detection disabled - all images will be processed!");
+                              "%s", TR(i18n::keys::DIALOG_BATCH_NO_DETECT));
         }
 
         ImGui::Spacing();
@@ -902,13 +926,13 @@ void MainWindow::render_batch_confirm_dialog() {
 
         float button_w = 120.0f * state.dpi_scale;
 
-        if (ImGui::Button("Process", ImVec2(button_w, 0))) {
+        if (ImGui::Button(TR(i18n::keys::DIALOG_PROCESS), ImVec2(button_w, 0))) {
             state.batch.show_confirm_dialog = false;
             m_controller.start_batch_processing();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(button_w, 0))) {
+        if (ImGui::Button(TR(i18n::keys::DIALOG_CANCEL), ImVec2(button_w, 0))) {
             state.batch.show_confirm_dialog = false;
             ImGui::CloseCurrentPopup();
         }

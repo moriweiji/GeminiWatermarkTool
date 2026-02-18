@@ -23,6 +23,41 @@ on:
 
 jobs:
   # ===========================================================================
+  # Unit Tests (Linux)
+  # ===========================================================================
+  test:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build
+
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: '594ad8871e1e8e45f8e626c015fd611163430207'
+
+    - name: Configure with tests
+      run: |
+        cmake -B build-test -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_TESTS=ON \
+          -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+          -DVCPKG_TARGET_TRIPLET=x64-linux
+
+    - name: Build tests
+      run: cmake --build build-test --target GeminiWatermarkTool_tests
+
+    - name: Run tests
+      run: |
+        cd build-test
+        ctest --output-on-failure --verbose
+
+  # ===========================================================================
   # Windows Build
   # ===========================================================================
   build-windows:

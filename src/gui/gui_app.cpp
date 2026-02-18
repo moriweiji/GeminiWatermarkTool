@@ -10,6 +10,8 @@
 #include "gui/app/app_controller.hpp"
 #include "gui/widgets/main_window.hpp"
 #include "gui/resources/style.hpp"
+#include "i18n/i18n.hpp"
+#include "i18n/keys.hpp"
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -34,7 +36,35 @@ constexpr int kDefaultWidth = 1600;
 constexpr int kDefaultHeight = 1250;
 constexpr int kMinWidth = 1030;
 constexpr int kMinHeight = 888;
-constexpr const char* kWindowTitle = "Gemini Watermark Tool";
+
+// Find language directory relative to executable
+std::filesystem::path find_lang_dir() {
+    // 1. Check executable directory
+    auto exe_dir = std::filesystem::current_path();
+    if (std::filesystem::exists(exe_dir / "lang" / "en.json")) {
+        return exe_dir / "lang";
+    }
+
+    // 2. Check resources directory (development)
+    if (std::filesystem::exists("resources/lang/en.json")) {
+        return "resources/lang";
+    }
+
+    // 3. Check parent directory (some build configurations)
+    if (std::filesystem::exists(exe_dir.parent_path() / "lang" / "en.json")) {
+        return exe_dir.parent_path() / "lang";
+    }
+
+#ifdef __linux__
+    // 4. Check system install location (Linux)
+    if (std::filesystem::exists("/usr/share/gemini-watermark-tool/lang/en.json")) {
+        return "/usr/share/gemini-watermark-tool/lang";
+    }
+#endif
+
+    // Fallback
+    return "lang";
+}
 
 // Parse backend type from command line
 BackendType parse_backend_arg(int argc, char** argv) {
@@ -65,6 +95,14 @@ int run(int argc, char** argv) {
 #endif
 
     spdlog::info("Starting Gemini Watermark Tool GUI v{}", APP_VERSION);
+
+    // Initialize i18n
+    auto lang_dir = find_lang_dir();
+    if (i18n::init(lang_dir, i18n::Language::ChineseSimp)) {
+        spdlog::info("i18n initialized from: {}", lang_dir.string());
+    } else {
+        spdlog::warn("i18n initialization failed, using fallback strings");
+    }
 
     // Initialize SDL
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -97,7 +135,7 @@ int run(int argc, char** argv) {
 #endif
 
     SDL_Window* window = SDL_CreateWindow(
-        kWindowTitle,
+        TR(i18n::keys::WINDOW_TITLE),
         kDefaultWidth,
         kDefaultHeight,
         window_flags
