@@ -88,7 +88,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: GeminiWatermarkTool-Windows-x64
-        path: out/build/windows-x64-Release/GeminiWatermarkTool.exe
+        path: |
+          out/build/windows-x64-Release/GeminiWatermarkTool.exe
+          out/build/windows-x64-Release/lang/
 
   # ===========================================================================
   # Linux Build
@@ -136,7 +138,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: GeminiWatermarkTool-Linux-x64
-        path: out/build/linux-x64-Release/GeminiWatermarkTool
+        path: |
+          out/build/linux-x64-Release/GeminiWatermarkTool
+          out/build/linux-x64-Release/lang/
 
   # ===========================================================================
   # macOS Build (Universal Binary)
@@ -181,6 +185,8 @@ jobs:
       run: |
         lipo -create build-x64/GeminiWatermarkTool build-arm64/GeminiWatermarkTool -output GeminiWatermarkTool
         strip GeminiWatermarkTool
+        # Copy lang directory from one of the builds
+        cp -r build-x64/lang ./lang
 
     - name: Ad-hoc code sign
       run: |
@@ -198,7 +204,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: GeminiWatermarkTool-macOS-Universal
-        path: GeminiWatermarkTool
+        path: |
+          GeminiWatermarkTool
+          lang/
 
   # ===========================================================================
   # Release (on tag push)
@@ -236,22 +244,25 @@ jobs:
 
     - name: Prepare release files
       run: |
-        # Windows
+        # Windows (include lang directory)
         cp GeminiWatermarkTool-Windows-x64/GeminiWatermarkTool.exe ./GeminiWatermarkTool.exe
-        zip GeminiWatermarkTool-Windows-x64.zip GeminiWatermarkTool.exe
-        rm GeminiWatermarkTool.exe
+        cp -r GeminiWatermarkTool-Windows-x64/lang ./lang
+        zip -r GeminiWatermarkTool-Windows-x64.zip GeminiWatermarkTool.exe lang/
+        rm -rf GeminiWatermarkTool.exe lang/
 
-        # Linux
+        # Linux (include lang directory)
         cp GeminiWatermarkTool-Linux-x64/GeminiWatermarkTool ./GeminiWatermarkTool
+        cp -r GeminiWatermarkTool-Linux-x64/lang ./lang
         chmod +x GeminiWatermarkTool
-        zip GeminiWatermarkTool-Linux-x64.zip GeminiWatermarkTool
-        rm GeminiWatermarkTool
+        zip -r GeminiWatermarkTool-Linux-x64.zip GeminiWatermarkTool lang/
+        rm -rf GeminiWatermarkTool lang/
 
-        # macOS
+        # macOS (include lang directory)
         cp GeminiWatermarkTool-macOS-Universal/GeminiWatermarkTool ./GeminiWatermarkTool
+        cp -r GeminiWatermarkTool-macOS-Universal/lang ./lang
         chmod +x GeminiWatermarkTool
-        zip GeminiWatermarkTool-macOS-Universal.zip GeminiWatermarkTool
-        rm GeminiWatermarkTool
+        zip -r GeminiWatermarkTool-macOS-Universal.zip GeminiWatermarkTool lang/
+        rm -rf GeminiWatermarkTool lang/
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
