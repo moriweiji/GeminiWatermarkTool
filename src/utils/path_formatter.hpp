@@ -108,6 +108,23 @@ inline std::filesystem::path path_from_utf8(const std::string& utf8_str) {
 }  // namespace gwt
 
 // =============================================================================
+// fmt formatter specialization for std::filesystem::path
+// MUST be defined before any spdlog includes to avoid instantiation issues
+// =============================================================================
+
+template <>
+struct fmt::formatter<std::filesystem::path> : fmt::formatter<std::string_view> {
+    auto format(const std::filesystem::path& p, format_context& ctx) const {
+        auto u8 = p.u8string();
+        std::string_view sv{
+            reinterpret_cast<const char*>(u8.data()),
+            u8.size()
+        };
+        return fmt::formatter<std::string_view>::format(sv, ctx);
+    }
+};
+
+// =============================================================================
 // OpenCV UTF-8 path support for Windows
 // =============================================================================
 
@@ -223,19 +240,3 @@ inline bool imwrite_utf8(const std::filesystem::path& path,
 }
 
 }  // namespace gwt
-
-// =============================================================================
-// fmt formatter specialization for std::filesystem::path
-// =============================================================================
-
-template <>
-struct fmt::formatter<std::filesystem::path> : fmt::formatter<std::string_view> {
-    auto format(const std::filesystem::path& p, format_context& ctx) const {
-        auto u8 = p.u8string();
-        std::string_view sv{
-            reinterpret_cast<const char*>(u8.data()),
-            u8.size()
-        };
-        return fmt::formatter<std::string_view>::format(sv, ctx);
-    }
-};
