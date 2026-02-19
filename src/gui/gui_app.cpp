@@ -29,6 +29,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -128,11 +129,18 @@ int run(int argc, char** argv) {
     auto logger = spdlog::stdout_color_mt("gwt-gui");
     spdlog::set_default_logger(logger);
 
+    // Check for debug environment variable (GWT_DEBUG=1 enables debug logging)
+    const char* debug_env = std::getenv("GWT_DEBUG");
+    if (debug_env && std::string(debug_env) == "1") {
+        spdlog::set_level(spdlog::level::debug);
+        spdlog::info("Debug logging enabled via GWT_DEBUG=1");
+    } else {
 #if defined(DEBUG) || defined(_DEBUG)
-    spdlog::set_level(spdlog::level::debug);
+        spdlog::set_level(spdlog::level::debug);
 #else
-    spdlog::set_level(spdlog::level::info);
+        spdlog::set_level(spdlog::level::info);
 #endif
+    }
 
     spdlog::info("Starting Gemini Watermark Tool GUI v{}", APP_VERSION);
 

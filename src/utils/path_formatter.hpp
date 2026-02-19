@@ -112,6 +112,7 @@ inline std::filesystem::path path_from_utf8(const std::string& utf8_str) {
 // =============================================================================
 
 #include <opencv2/opencv.hpp>
+#include <spdlog/spdlog.h>
 #include <fstream>
 
 namespace gwt {
@@ -128,25 +129,47 @@ namespace gwt {
  * @return       Loaded cv::Mat, or empty Mat on failure
  */
 inline cv::Mat imread_utf8(const std::filesystem::path& path, int flags = cv::IMREAD_COLOR) {
+    spdlog::debug("[imread_utf8] Reading: {}", path);
+
 #ifdef _WIN32
     // On Windows, read file as binary and decode
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
+        spdlog::error("[imread_utf8] Failed to open file: {}", path);
         return cv::Mat();
     }
 
     auto size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    std::vector<char> buffer(static_cast<size_t>(size));
-    if (!file.read(buffer.data(), size)) {
+    if (size <= 0) {
+        spdlog::error("[imread_utf8] Invalid file size: {}", static_cast<long long>(size));
         return cv::Mat();
     }
 
-    return cv::imdecode(cv::Mat(1, static_cast<int>(buffer.size()), CV_8UC1, buffer.data()), flags);
+    file.seekg(0, std::ios::beg);
+
+    std::vector<uchar> buffer(static_cast<size_t>(size));
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        spdlog::error("[imread_utf8] Failed to read file data");
+        return cv::Mat();
+    }
+    file.close();
+
+    spdlog::debug("[imread_utf8] Read {} bytes, decoding...", buffer.size());
+
+    cv::Mat result = cv::imdecode(buffer, flags);
+    if (result.empty()) {
+        spdlog::error("[imread_utf8] imdecode failed for: {}", path);
+    } else {
+        spdlog::debug("[imread_utf8] Decoded image: {}x{}", result.cols, result.rows);
+    }
+    return result;
 #else
     // Linux/macOS: imread works with UTF-8 natively
-    return cv::imread(path.string(), flags);
+    cv::Mat result = cv::imread(path.string(), flags);
+    if (result.empty()) {
+        spdlog::error("[imread_utf8] imread failed for: {}", path);
+    }
+    return result;
 #endif
 }
 
@@ -161,25 +184,41 @@ inline cv::Mat imread_utf8(const std::filesystem::path& path, int flags = cv::IM
 inline bool imwrite_utf8(const std::filesystem::path& path,
                          const cv::Mat& img,
                          const std::vector<int>& params = {}) {
+    spdlog::debug("[imwrite_utf8] Writing: {} ({}x{})", path, img.cols, img.rows);
+
 #ifdef _WIN32
     // Encode image to memory buffer
     std::string ext = path.extension().string();
     std::vector<uchar> buffer;
     if (!cv::imencode(ext, img, buffer, params)) {
+        spdlog::error("[imwrite_utf8] imencode failed for: {}", path);
         return false;
     }
 
     // Write buffer to file using wide path
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) {
+        spdlog::error("[imwrite_utf8] Failed to create file: {}", path);
         return false;
     }
 
     file.write(reinterpret_cast<const char*>(buffer.data()),
                static_cast<std::streamsize>(buffer.size()));
-    return file.good();
+    bool success = file.good();
+    file.close();
+
+    if (success) {
+        spdlog::debug("[imwrite_utf8] Wrote {} bytes", buffer.size());
+    } else {
+        spdlog::error("[imwrite_utf8] Write failed for: {}", path);
+    }
+    return success;
 #else
-    return cv::imwrite(path.string(), img, params);
+    bool success = cv::imwrite(path.string(), img, params);
+    if (!success) {
+        spdlog::error("[imwrite_utf8] imwrite failed for: {}", path);
+    }
+    return success;
 #endif
 }
 

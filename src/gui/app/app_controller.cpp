@@ -52,19 +52,22 @@ AppController::~AppController() {
 // =============================================================================
 
 bool AppController::load_image(const std::filesystem::path& path) {
-    spdlog::info("Loading image: {}", path);
+    spdlog::info("[load_image] Start loading: {}", path);
 
     // Read image first to validate (use UTF-8 aware function for Windows)
+    spdlog::debug("[load_image] Calling imread_utf8...");
     cv::Mat image = imread_utf8(path, cv::IMREAD_COLOR);
     if (image.empty()) {
         m_state.state = ProcessState::Error;
         m_state.error_message = "Failed to load image: " + to_utf8(path);
         m_state.status_message = TR(i18n::keys::STATUS_LOAD_FAILED);
-        spdlog::error("{}", m_state.error_message);
+        spdlog::error("[load_image] {}", m_state.error_message);
         return false;
     }
+    spdlog::debug("[load_image] Image read successfully: {}x{}", image.cols, image.rows);
 
     // Clean up old state completely (including texture)
+    spdlog::debug("[load_image] Cleaning up old state...");
     if (m_state.preview_texture.valid()) {
         m_backend.destroy_texture(m_state.preview_texture);
         m_state.preview_texture = TextureHandle{};
@@ -72,6 +75,7 @@ bool AppController::load_image(const std::filesystem::path& path) {
     m_state.reset();
 
     // Update state with new image
+    spdlog::debug("[load_image] Updating state with new image...");
     m_state.image.file_path = path;
     m_state.image.original = image;
     m_state.image.width = image.cols;
@@ -81,13 +85,16 @@ bool AppController::load_image(const std::filesystem::path& path) {
 
     // Run auto-detection when entering custom mode
     if (m_state.process_options.size_mode == WatermarkSizeMode::Custom && m_state.image.has_image()) {
+        spdlog::debug("[load_image] Running custom watermark detection...");
         detect_custom_watermark();
     }
 
     // Detect watermark info
+    spdlog::debug("[load_image] Updating watermark info...");
     update_watermark_info();
 
     // Update display
+    spdlog::debug("[load_image] Updating display image...");
     update_display_image();
 
     // Update state
@@ -95,7 +102,7 @@ bool AppController::load_image(const std::filesystem::path& path) {
     m_state.status_message = TRF(i18n::keys::STATUS_LOADED, image.cols, image.rows);
     m_state.error_message.clear();
 
-    spdlog::info("Image loaded: {}x{} ({} channels)",
+    spdlog::info("[load_image] Complete: {}x{} ({} channels)",
                  image.cols, image.rows, image.channels());
 
     return true;
@@ -671,13 +678,17 @@ bool AppController::is_supported_extension(const std::filesystem::path& path) {
 // =============================================================================
 
 void AppController::update_watermark_info() {
+    spdlog::debug("[update_watermark_info] Start");
+
     if (!m_state.image.has_image()) {
+        spdlog::debug("[update_watermark_info] No image, resetting info");
         m_state.watermark_info.reset();
         return;
     }
 
     int w = m_state.image.width;
     int h = m_state.image.height;
+    spdlog::debug("[update_watermark_info] Image size: {}x{}", w, h);
 
     // Custom mode uses custom_watermark state
     if (m_state.process_options.size_mode == WatermarkSizeMode::Custom &&
@@ -730,26 +741,40 @@ void AppController::update_watermark_info() {
 }
 
 void AppController::update_display_image() {
+    spdlog::debug("[update_display_image] Start");
+
     if (!m_state.image.has_image()) {
+        spdlog::debug("[update_display_image] No image, releasing display");
         m_state.image.display.release();
         m_state.texture_needs_update = true;
         return;
     }
 
     if (m_state.preview_options.show_processed && m_state.image.has_processed()) {
+        spdlog::debug("[update_display_image] Using processed image");
         m_state.image.display = m_state.image.processed;
     } else {
+        spdlog::debug("[update_display_image] Using original image");
         m_state.image.display = m_state.image.original;
     }
 
+    spdlog::debug("[update_display_image] Display image: {}x{}",
+                  m_state.image.display.cols, m_state.image.display.rows);
     m_state.texture_needs_update = true;
 }
 
 void AppController::create_or_update_texture() {
-    if (m_state.image.display.empty()) return;
+    spdlog::debug("[create_or_update_texture] Start");
+
+    if (m_state.image.display.empty()) {
+        spdlog::debug("[create_or_update_texture] Display image is empty, skipping");
+        return;
+    }
 
     // Prepare texture data (BGR -> RGBA)
+    spdlog::debug("[create_or_update_texture] Preparing texture data...");
     cv::Mat rgba = prepare_texture_data(m_state.image.display);
+    spdlog::debug("[create_or_update_texture] RGBA image: {}x{}", rgba.cols, rgba.rows);
 
     // Create texture description
     TextureDesc desc;
@@ -759,17 +784,21 @@ void AppController::create_or_update_texture() {
 
     // Create span from cv::Mat data
     std::span<const uint8_t> data(rgba.data, rgba.total() * rgba.elemSize());
+    spdlog::debug("[create_or_update_texture] Data size: {} bytes", data.size());
 
     if (!m_state.preview_texture.valid()) {
         // Create new texture
+        spdlog::debug("[create_or_update_texture] Creating new texture...");
         TextureHandle result = m_backend.create_texture(desc, data);
         if (result.valid()) {
             m_state.preview_texture = result;
+            spdlog::debug("[create_or_update_texture] Texture created successfully");
         } else {
-            spdlog::error("Failed to create texture: {}", to_string(m_backend.last_error()));
+            spdlog::error("[create_or_update_texture] Failed to create texture: {}", to_string(m_backend.last_error()));
         }
     } else {
         // Update existing texture
+        spdlog::debug("[create_or_update_texture] Updating existing texture...");
         m_backend.update_texture(m_state.preview_texture, data);
     }
 }
